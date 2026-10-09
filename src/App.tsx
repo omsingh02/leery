@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { MotionConfig } from "framer-motion";
+import { FxProvider } from "@/components/fx/FxProvider";
 import { AppToaster } from "@/components/shell/AppToaster";
 import { ConfigError } from "@/components/shell/ConfigError";
 import { configured } from "@/lib/supabase";
@@ -27,18 +28,20 @@ export default function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <AppToaster />
-      {configured ? (
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/r/:code" element={<RoomPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      ) : (
-        <ConfigError />
-      )}
+      <FxProvider>
+        <AppToaster />
+        {configured ? (
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/r/:code" element={<RoomPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        ) : (
+          <ConfigError />
+        )}
+      </FxProvider>
     </MotionConfig>
   );
 }

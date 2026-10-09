@@ -2,10 +2,11 @@ import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, Bot, Minus, Plus, RotateCcw, Users, X, Zap } from "lucide-react";
-import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { CardFan } from "@/components/shell/DecorCards";
 import { LogoMark } from "@/components/shell/Logo";
 import { RulesButton } from "@/components/shell/RulesDialog";
+import { SettingsButton } from "@/components/shell/SettingsDialog";
 import { SoundToggle } from "@/components/shell/SoundToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,7 +62,7 @@ export function Home() {
       const view = await api.createRoom(getToken(), clean, kind === "solo" ? { bots, start: true } : {});
       navigate(`/r/${view.code}`);
     } catch (e) {
-      toast.error((e instanceof ApiError ? e : new ApiError("unknown")).message);
+      notifyError((e instanceof ApiError ? e : new ApiError("unknown")).message);
     } finally {
       setBusy(null);
     }
@@ -315,6 +316,7 @@ export function Home() {
         <div className="flex items-center gap-1">
           <RulesButton />
           <SoundToggle />
+          <SettingsButton />
         </div>
         <p className="text-right leading-relaxed">
           © 2026{" "}

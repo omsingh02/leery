@@ -1,86 +1,62 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Crown, LogOut, RotateCcw, Trophy } from "lucide-react";
 import { Badge } from "@/components/shell/Badge";
 import { WaitingDots } from "@/components/shell/WaitingDots";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import type { RoomController } from "@/hooks/useRoom";
+import { feel } from "@/lib/feel";
+import { COLOR } from "@/lib/feel/plan";
+import { useFx } from "@/lib/fx";
 import { playerById } from "@/lib/game";
-import { sfx } from "@/lib/sound";
+import { spring } from "@/lib/motion";
+import { useEffectsReduced } from "@/lib/prefs";
 import type { RoomView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useDocumentTitle } from "./helpers";
 
-const spring = { type: "spring" as const, stiffness: 380, damping: 28 };
+const cardsLeft = (n: number) => (n === 0 ? "Cleared" : `${n} card${n === 1 ? "" : "s"} left`);
 
-/** Small deterministic PRNG so the confetti layout is stable across re-renders / StrictMode. */
-function mulberry32(seed: number) {
-  let a = seed;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-const hash = (s: string) => Array.from(s).reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) | 0, 7);
-
-const CONFETTI = ["#fbbf24", "#f472b6", "#8b5cf6", "#2dd4bf", "#f87171", "#fde68a", "#a5b4fc"];
-
-/** One-shot confetti burst from just above centre — pure framer-motion, no libraries. */
-function Confetti({ count, seed }: { count: number; seed: number }) {
-  const pieces = useMemo(() => {
-    const rnd = mulberry32(seed);
-    return Array.from({ length: count }, (_, i) => {
-      const angle = -Math.PI * (0.08 + rnd() * 0.84); // fan out across the upper half-circle
-      const speed = 130 + rnd() * 300;
-      const size = 6 + rnd() * 7;
-      const round = rnd() > 0.6;
-      return {
-        i,
-        dx: Math.cos(angle) * speed,
-        dy: Math.sin(angle) * speed,
-        fall: 280 + rnd() * 380,
-        rot: (rnd() - 0.5) * 1000,
-        w: size,
-        h: round ? size : size * 0.5,
-        round,
-        color: CONFETTI[i % CONFETTI.length],
-        delay: rnd() * 0.22,
-        dur: 2 + rnd() * 1.2,
-      };
-    });
-  }, [count, seed]);
-
+/** The headline, one word at a time, each letter dropping in — readable as plain text by screen readers. */
+function Headline({ text, reduced, className }: { text: string; reduced: boolean; className?: string }) {
+  const words = text.split(" ");
+  let n = 0;
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-10 overflow-hidden">
-      <div className="absolute left-1/2 top-[24%]">
-        {pieces.map((p) => (
-          <motion.span
-            key={p.i}
-            className="absolute block"
-            style={{ width: p.w, height: p.h, background: p.color, borderRadius: p.round ? "50%" : 2 }}
-            initial={{ x: 0, y: 0, opacity: 0, rotate: 0 }}
-            animate={{ x: [0, p.dx, p.dx * 1.15], y: [0, p.dy, p.dy + p.fall], opacity: [0, 1, 0], rotate: p.rot }}
-            transition={{ duration: p.dur, delay: p.delay, times: [0, 0.35, 1], ease: "easeOut" }}
-          />
-        ))}
-      </div>
-    </div>
+    <span aria-label={text} className={className}>
+      {words.map((word, wi) => (
+        <Fragment key={wi}>
+          {wi > 0 ? " " : null}
+          <span aria-hidden className="inline-block whitespace-nowrap">
+            {Array.from(word).map((ch) => {
+              const i = n++;
+              return (
+                <motion.span
+                  key={i}
+                  className="inline-block"
+                  initial={reduced ? { opacity: 0 } : { opacity: 0, y: 26, rotate: (i % 2 ? 1 : -1) * 9, scale: 0.7 }}
+                  animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0, rotate: 0, scale: 1 }}
+                  transition={{ ...spring.pop, delay: 0.5 + i * 0.035 }}
+                >
+                  {ch}
+                </motion.span>
+              );
+            })}
+          </span>
+        </Fragment>
+      ))}
+    </span>
   );
 }
 
-const cardsLeft = (n: number) => (n === 0 ? "Cleared" : `${n} card${n === 1 ? "" : "s"} left`);
-
 export function GameOver({ room, view }: { room: RoomController; view: RoomView }) {
   const navigate = useNavigate();
-  const reduceMotion = useReducedMotion();
+  const reduced = useEffectsReduced();
+  const fx = useFx();
   const [rematching, setRematching] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const crownRef = useRef<HTMLDivElement>(null);
 
   const { players, me, winner: winnerId } = view;
   const winner = playerById(players, winnerId);
@@ -104,12 +80,26 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
 
   useDocumentTitle(iWon ? "You won! · Leery" : `${winner?.name ?? "Someone"} won · Leery`);
 
-  const sounded = useRef(false);
+  // The finale: sound, vibration, and (for a win) confetti cannons from the corners and a glint where the crown lands.
+  const staged = useRef(false);
   useEffect(() => {
-    if (sounded.current) return;
-    sounded.current = true;
-    sfx.play(iWon ? "win" : "lose");
-  }, [iWon]);
+    if (staged.current) return;
+    staged.current = true;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (iWon) {
+      feel.emit({ type: "game.win", at: { x: w / 2, y: h * 0.26 } });
+      fx.burst("confetti", { x: -8, y: h + 8 }, { count: 46, power: 1, spread: 46, angle: -58, delay: 0.25 });
+      fx.burst("confetti", { x: w + 8, y: h + 8 }, { count: 46, power: 1, spread: 46, angle: -122, delay: 0.25 });
+      const crown = crownRef.current?.getBoundingClientRect();
+      if (crown) fx.burst("glints", { x: crown.left + crown.width / 2, y: crown.top + crown.height / 2 }, { count: 14, power: 0.5, spread: 360, color: [COLOR.gold, COLOR.ivory], delay: 0.75 });
+    } else {
+      feel.emit({ type: "game.lose" });
+      fx.vignette(0.3, COLOR.violet);
+    }
+    return () => fx.vignette(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- staged once
+  }, []);
 
   async function rematch() {
     if (rematching) return;
@@ -136,29 +126,41 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
       data-testid="game-over"
       className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col items-center justify-center px-4 py-8 safe-pt safe-pb"
     >
-      {!reduceMotion && <Confetti count={iWon ? 54 : 18} seed={hash(view.code)} />}
-
+      {/* spotlight from above: gold for a win, cool violet-grey for a loss */}
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ ...spring, delay: 0.05 }}
-        className="relative z-20 w-full text-center"
-      >
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-[1]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.9 }}
+        style={{
+          background: iWon
+            ? "radial-gradient(70% 50% at 50% 12%, hsl(var(--gold) / 0.2), transparent 70%)"
+            : "radial-gradient(70% 50% at 50% 12%, hsl(var(--primary) / 0.16), transparent 70%)",
+        }}
+      />
+
+      <div className="relative z-20 w-full text-center">
         <div className="relative mx-auto grid h-32 w-32 place-items-center">
-          <div aria-hidden className="absolute inset-2 rounded-full bg-gold/35 blur-2xl motion-safe:animate-pulse" />
-          <div aria-hidden className="absolute inset-0 rounded-full border border-gold/30 motion-safe:animate-ring-pulse" />
+          <div aria-hidden className={cn("absolute inset-2 rounded-full blur-2xl motion-safe:animate-pulse", iWon ? "bg-gold/35" : "bg-primary/25")} />
+          <div aria-hidden className={cn("absolute inset-0 rounded-full border motion-safe:animate-ring-pulse", iWon ? "border-gold/30" : "border-primary/30")} />
           <motion.div
-            initial={{ scale: 0, rotate: -25 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 260, damping: 16, delay: 0.15 }}
+            initial={reduced ? { opacity: 0 } : { y: -220, rotate: -18, scale: 0.7, opacity: 0 }}
+            animate={reduced ? { opacity: 1 } : { y: 0, rotate: 0, scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 210, damping: 13, mass: 1.1, delay: 0.1 }}
             className="relative"
           >
             {winner ? (
-              <Avatar name={winner.name} color={winner.color} bot={winner.bot} size={96} className="ring-4 ring-gold/70">
-                <Crown
-                  className="absolute -top-7 left-1/2 h-9 w-9 -translate-x-1/2 -rotate-6 fill-gold text-gold drop-shadow-[0_0_12px_hsl(var(--gold))]"
-                  aria-hidden
-                />
+              <Avatar name={winner.name} color={winner.color} bot={winner.bot} size={96} className={cn("ring-4", iWon ? "ring-gold/70" : "ring-white/25")}>
+                <motion.div
+                  ref={crownRef}
+                  initial={reduced ? { opacity: 0 } : { y: -42, opacity: 0, rotate: 14, scale: 1.3 }}
+                  animate={reduced ? { opacity: 1 } : { y: 0, opacity: 1, rotate: -6, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 12, delay: 0.62 }}
+                  className="absolute -top-7 left-1/2 -ml-[18px]"
+                >
+                  <Crown className="h-9 w-9 fill-gold text-gold drop-shadow-[0_0_12px_hsl(var(--gold))]" aria-hidden />
+                </motion.div>
               </Avatar>
             ) : (
               <Trophy className="h-20 w-20 text-gold" aria-hidden />
@@ -166,23 +168,36 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
           </motion.div>
         </div>
 
-        <p className="mt-7 text-xs font-semibold uppercase tracking-[0.28em] text-gold">{iWon ? "Victory" : "Game over"}</p>
-        <h1
-          data-testid="winner-name"
-          className="mt-1.5 break-words font-display text-[2.4rem] font-black leading-[1.05] tracking-tight sm:text-5xl"
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...spring.soft, delay: 0.4 }}
+          className={cn("mt-7 text-xs font-semibold uppercase tracking-[0.28em]", iWon ? "text-gold" : "text-muted")}
         >
-          <span className="bg-gradient-to-b from-amber-100 via-gold to-amber-500 bg-clip-text text-transparent drop-shadow-[0_0_26px_hsl(var(--gold)/0.45)]">
-            {headline}
-          </span>
+          {iWon ? "Victory" : "Game over"}
+        </motion.p>
+        <h1 data-testid="winner-name" className="mt-1.5 break-words font-display text-[2.4rem] font-black leading-[1.05] tracking-tight sm:text-5xl">
+          <Headline
+            text={headline}
+            reduced={reduced}
+            className={cn(
+              "bg-gradient-to-b bg-clip-text text-transparent",
+              iWon
+                ? "from-amber-100 via-gold to-amber-500 drop-shadow-[0_0_26px_hsl(var(--gold)/0.45)]"
+                : "from-foreground via-violet-200 to-violet-400 drop-shadow-[0_0_22px_hsl(var(--primary)/0.35)]",
+            )}
+          />
         </h1>
-        <p className="mt-2 text-sm text-muted">{subline}</p>
-      </motion.div>
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.95, duration: 0.4 }} className="mt-2 text-sm text-muted">
+          {subline}
+        </motion.p>
+      </div>
 
       <motion.section
         aria-labelledby="standings-heading"
         initial={{ opacity: 0, y: 22 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ ...spring, delay: 0.22 }}
+        transition={{ ...spring.soft, delay: 0.85 }}
         className="glass relative z-20 mt-7 w-full rounded-3xl p-4"
       >
         <h2 id="standings-heading" className="mb-2.5 px-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted">
@@ -195,17 +210,22 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
               <motion.li
                 key={p.id}
                 data-testid={`standing-${p.id}`}
-                initial={{ opacity: 0, x: -14 }}
+                initial={{ opacity: 0, x: -18 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ ...spring, delay: 0.3 + i * 0.06 }}
+                transition={{ ...spring.snappy, delay: 0.95 + i * 0.07 }}
                 className={cn(
-                  "flex h-[52px] items-center gap-3 rounded-2xl border px-3",
+                  "relative flex h-[52px] items-center gap-3 overflow-hidden rounded-2xl border px-3",
                   isWinner ? "border-gold/40 bg-gold/[0.08]" : p.id === me.id ? "border-primary/35 bg-white/[0.04]" : "border-white/[0.06] bg-white/[0.03]",
                 )}
               >
+                {isWinner && !reduced && (
+                  <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+                    <span className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-gold/25 to-transparent animate-shine" />
+                  </span>
+                )}
                 <span
                   className={cn(
-                    "grid h-7 w-7 shrink-0 place-items-center rounded-full font-display text-xs font-bold",
+                    "relative grid h-7 w-7 shrink-0 place-items-center rounded-full font-display text-xs font-bold",
                     isWinner ? "bg-gold text-ink" : "bg-white/10 text-muted",
                   )}
                   aria-label={`Place ${placeOf(p.id, p.cards)}`}
@@ -213,12 +233,12 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
                   {isWinner ? <Trophy className="h-3.5 w-3.5" aria-hidden /> : placeOf(p.id, p.cards)}
                 </span>
                 <Avatar name={p.name} color={p.color} bot={p.bot} size={34} />
-                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <div className="relative flex min-w-0 flex-1 items-center gap-1.5">
                   <span className="truncate font-semibold">{p.name}</span>
                   {p.id === me.id && <Badge tone="primary">You</Badge>}
                   {p.left && <Badge>Left</Badge>}
                 </div>
-                <span className={cn("shrink-0 text-sm tabular-nums", isWinner ? "font-semibold text-gold" : "text-muted")}>
+                <span className={cn("relative shrink-0 text-sm tabular-nums", isWinner ? "font-semibold text-gold" : "text-muted")}>
                   {cardsLeft(p.cards)}
                 </span>
               </motion.li>
@@ -230,13 +250,16 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ ...spring, delay: 0.4 }}
+        transition={{ ...spring.soft, delay: 1.25 }}
         className="relative z-20 mt-6 flex w-full flex-col gap-2.5"
       >
         {me.host ? (
-          <Button variant="gold" size="xl" className="w-full" data-testid="rematch" loading={rematching} onClick={() => void rematch()}>
-            <RotateCcw className="h-5 w-5" aria-hidden />
-            Play again
+          <Button variant="gold" size="xl" className="relative w-full overflow-hidden" data-testid="rematch" loading={rematching} onClick={() => void rematch()}>
+            <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+              <span className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shine" />
+            </span>
+            <RotateCcw className="relative h-5 w-5" aria-hidden />
+            <span className="relative">Play again</span>
           </Button>
         ) : (
           <p

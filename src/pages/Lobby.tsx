@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bot, Check, Crown, Link2, LogOut, Play, Share2, X } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { Badge } from "@/components/shell/Badge";
 import { Logo } from "@/components/shell/Logo";
 import { RulesButton } from "@/components/shell/RulesDialog";
+import { SettingsButton } from "@/components/shell/SettingsDialog";
 import { SoundToggle } from "@/components/shell/SoundToggle";
 import { useReturnFocus } from "@/components/shell/useReturnFocus";
 import { WaitingDots } from "@/components/shell/WaitingDots";
@@ -14,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog";
 import type { RoomController } from "@/hooks/useRoom";
 import { BOT_STYLES, SPEEDS } from "@/lib/game";
-import { sfx } from "@/lib/sound";
+import { feel } from "@/lib/feel";
 import { MAX_PLAYERS, MIN_PLAYERS, type PlayerView, type RoomView, type Speed } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { copyText, inviteLink, useDocumentTitle } from "./helpers";
@@ -44,7 +46,8 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
   // A little "pop" whenever someone new sits down.
   const prevCount = useRef(players.length);
   useEffect(() => {
-    if (players.length > prevCount.current) sfx.play("join");
+    if (players.length > prevCount.current) feel.emit({ type: "lobby.join" });
+    else if (players.length < prevCount.current) feel.emit({ type: "lobby.leave" });
     prevCount.current = players.length;
   }, [players.length]);
 
@@ -59,18 +62,20 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
   async function copyCode() {
     if (await copyText(code)) {
       flash("code");
+      feel.emit({ type: "ui.copy" });
       toast.success("Room code copied");
     } else {
-      toast.error("Couldn't copy — press and hold the code instead");
+      notifyError("Couldn't copy — press and hold the code instead");
     }
   }
 
   async function copyLink() {
     if (await copyText(inviteLink(code))) {
       flash("link");
+      feel.emit({ type: "ui.copy" });
       toast.success("Invite link copied");
     } else {
-      toast.error("Couldn't copy the link");
+      notifyError("Couldn't copy the link");
     }
   }
 
@@ -82,7 +87,7 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
         url: inviteLink(code),
       });
     } catch (e) {
-      if (!(e instanceof DOMException && e.name === "AbortError")) toast.error("Couldn't open the share sheet");
+      if (!(e instanceof DOMException && e.name === "AbortError")) notifyError("Couldn't open the share sheet");
     }
   }
 
@@ -113,6 +118,7 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
         <div className="flex items-center gap-1">
           <RulesButton />
           <SoundToggle />
+          <SettingsButton />
         </div>
       </header>
 
@@ -387,11 +393,23 @@ function SpeedPicker({
   editable: boolean;
   onChange: (speed: Speed) => void;
 }) {
+  const speeds = Object.keys(SPEEDS) as Speed[];
+  const index = speeds.indexOf(value);
   return (
     <fieldset disabled={!editable} className="min-w-0">
       <legend className="sr-only">Game speed</legend>
-      <div className="grid grid-cols-3 gap-1.5 rounded-2xl bg-black/30 p-1.5">
-        {(Object.keys(SPEEDS) as Speed[]).map((s) => {
+      <div className="relative grid grid-cols-3 gap-1.5 rounded-2xl bg-black/30 p-1.5">
+        {/* The marker glides to the chosen speed (plain CSS transform: no layout measuring to go wrong). */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-1.5 left-1.5 rounded-xl bg-gradient-to-br from-primary to-accent shadow-glow-primary"
+          style={{
+            width: "calc((100% - 0.75rem - 0.75rem) / 3)",
+            transform: `translateX(calc(${index} * (100% + 0.375rem)))`,
+            transition: "transform 320ms cubic-bezier(0.34, 1.35, 0.5, 1)",
+          }}
+        />
+        {speeds.map((s) => {
           const checked = value === s;
           const [turn, call] = SPEEDS[s].blurb.split(" · ");
           return (
@@ -399,11 +417,9 @@ function SpeedPicker({
               key={s}
               data-testid={`speed-${s}`}
               className={cn(
-                "relative rounded-xl px-1.5 py-2.5 text-center transition-all duration-200",
+                "relative rounded-xl px-1.5 py-2.5 text-center transition-colors duration-200",
                 editable ? "cursor-pointer" : "cursor-default",
-                checked
-                  ? "bg-gradient-to-br from-primary to-accent text-white shadow-glow-primary"
-                  : cn("text-muted", editable && "hover:bg-white/[0.06] hover:text-foreground"),
+                checked ? "text-white" : cn("text-muted", editable && "hover:text-foreground"),
               )}
             >
               <input
@@ -411,13 +427,16 @@ function SpeedPicker({
                 name="speed"
                 value={s}
                 checked={checked}
-                onChange={() => onChange(s)}
+                onChange={() => {
+                  feel.emit({ type: "ui.toggle", on: true });
+                  onChange(s);
+                }}
                 className="peer sr-only"
               />
               <span aria-hidden className="pointer-events-none absolute inset-0 rounded-xl ring-2 ring-ring opacity-0 peer-focus-visible:opacity-100" />
-              <span className="block font-display text-[13px] font-bold">{SPEEDS[s].label}</span>
-              <span className="mt-1 block text-[10.5px] leading-tight opacity-85">{turn}</span>
-              <span className="block text-[10.5px] leading-tight opacity-85">{call}</span>
+              <span className="relative block font-display text-[13px] font-bold">{SPEEDS[s].label}</span>
+              <span className="relative mt-1 block text-[10.5px] leading-tight opacity-85">{turn}</span>
+              <span className="relative block text-[10.5px] leading-tight opacity-85">{call}</span>
             </label>
           );
         })}
