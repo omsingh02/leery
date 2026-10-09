@@ -7,7 +7,8 @@
  * Groups (default: all)
  *   logo     public/favicon.svg, docs/brand/logo*.svg
  *   icons    public/icon-*.png, public/apple-touch-icon.png
- *   screens  docs/screenshots/*.webp — real UI, rendered from the dev playground fixtures (src/dev/fixtures.ts)
+ *   screens  docs/screenshots/*.webp — real UI, rendered from the dev playground fixtures (src/dev/fixtures.ts),
+ *            plus docs/screenshots/bluff-called.webp, a short animated clip of a reveal
  *   social   public/og.png, docs/social-preview.png, docs/banner.png, docs/screenshots/hero.webp
  *
  * Needs: @playwright/test + a Chromium (`npx playwright install chromium`, or point E2E_CHROMIUM at a system
@@ -154,15 +155,35 @@ const DESKTOP = { width: 1440, height: 900, scale: 1.5 };
 // The pile flying to whoever picks it up after a reveal is mid-air in a still frame — keep it out of the shot.
 const NO_FLIGHTS = ".z-\\[60\\] { display: none !important }";
 
-/** `url` is relative to /dev/; `ready` is a selector that means the screen has rendered; `settle` lets animations land. */
+// First-time tips are for new players; the screenshots show the game, not the tutorial.
+const TIPS_SEEN = () => localStorage.setItem("leery.pref.hints", JSON.stringify(["select", "call", "drag"]));
+
+// Two cards: the verdict lands at 2510 ms (see revealTimeline.ts) and is settled a beat later; the pickup starts at 2930 ms.
+const REVEAL_AT = 2750;
+const CLOCK_START = new Date("2026-03-01T12:00:00Z");
+
+/**
+ * `url` is relative to /dev/; `ready` is a selector that means the screen has rendered; `settle` lets animations land.
+ * `act` runs after `ready` (open a dialog…).
+ * `clock` freezes time at load and plays exactly that many milliseconds of the choreography before the picture is taken —
+ * a software-rendered screenshot takes longer than the reveal's verdict-to-pickup window, so real time can't be trusted.
+ * `before` is a selector that must still be absent then (the pickup, 420 ms after the verdict, has not begun).
+ */
 const SHOTS = [
   { name: "home", url: "shell.html?page=home", ready: "[data-testid=create-room]", settle: 1600 },
   { name: "lobby", url: "shell.html?state=lobby-host", ready: "[data-testid=start-game]" },
   { name: "table", url: "game.html?state=turn-mine", ready: "[data-testid=play-button]" },
   { name: "challenge", url: "game.html?state=challenge-call", ready: "[data-testid=call-bluff]" },
-  { name: "reveal-bluff", url: "game.html?state=reveal-bluff", ready: "[data-testid=reveal-result]", settle: 400, css: NO_FLIGHTS },
-  { name: "reveal-honest", url: "game.html?state=reveal-honest", ready: "[data-testid=reveal-result]", settle: 400, css: NO_FLIGHTS },
+  { name: "reveal-bluff", url: "game.html?state=reveal-bluff", ready: "[data-testid=reveal-verdict]", clock: REVEAL_AT, before: "[data-testid=reveal-result]", css: NO_FLIGHTS },
+  { name: "reveal-honest", url: "game.html?state=reveal-honest", ready: "[data-testid=reveal-verdict]", clock: REVEAL_AT, before: "[data-testid=reveal-result]", css: NO_FLIGHTS },
   { name: "game-over", url: "shell.html?state=finished-win", ready: "[data-testid=rematch]", settle: 1800 },
+  {
+    name: "settings",
+    url: "shell.html?page=home",
+    ready: "[data-testid=open-settings]",
+    act: (page) => page.getByTestId("open-settings").first().click(),
+    settle: 900,
+  },
   { name: "desktop-table", url: "game.html?state=turn-mine", ready: "[data-testid=play-button]", desktop: true },
   { name: "desktop-lobby", url: "shell.html?state=lobby-host", ready: "[data-testid=start-game]", desktop: true },
 ];
@@ -184,29 +205,90 @@ function captureShots() {
 
     for (const shot of SHOTS) {
       const view = shot.desktop ? DESKTOP : MOBILE;
-      const context = await b.newContext({
-        viewport: { width: view.width, height: view.height },
-        deviceScaleFactor: view.scale,
-        colorScheme: "dark",
-        locale: "en-US",
-      });
-      const page = await context.newPage();
-      const errors = [];
-      page.on("pageerror", (e) => errors.push(e.message));
-      await page.goto(new URL(`dev/${shot.url}`, base).href, { waitUntil: "networkidle" });
-      // The playground paints an opaque body; the real app lets the ambient aurora show through.
-      await page.addStyleTag({ content: `body { background: transparent !important } ${shot.css ?? ""}` });
-      await page.waitForSelector(shot.ready, { state: "visible" });
-      await page.evaluate(() => document.fonts.ready);
-      await page.waitForTimeout(shot.settle ?? 1300);
-      files[shot.name] = scratch(`shot-${shot.name}.png`);
-      await page.screenshot({ path: files[shot.name] });
-      await context.close();
-      if (errors.length) throw new Error(`${shot.name}: ${errors.join("; ")}`);
+      for (let attempt = 1; ; attempt++) {
+        const context = await b.newContext({
+          viewport: { width: view.width, height: view.height },
+          deviceScaleFactor: view.scale,
+          colorScheme: "dark",
+          locale: "en-US",
+        });
+        await context.addInitScript(TIPS_SEEN);
+        const page = await context.newPage();
+        const errors = [];
+        page.on("pageerror", (e) => errors.push(e.message));
+        if (shot.clock) {
+          await page.clock.install({ time: CLOCK_START });
+          await page.clock.pauseAt(new Date(CLOCK_START.getTime() + 1000));
+        }
+        await page.goto(new URL(`dev/${shot.url}`, base).href, { waitUntil: "networkidle" });
+        // The playground paints an opaque body; the real app lets the ambient aurora show through.
+        await page.addStyleTag({ content: `body { background: transparent !important } ${shot.css ?? ""}` });
+        await page.evaluate(() => document.fonts.ready);
+        if (shot.clock) await page.clock.runFor(shot.clock);
+        await page.waitForSelector(shot.ready, { state: "visible" });
+        await shot.act?.(page);
+        if (!shot.clock) await page.waitForTimeout(shot.settle ?? 1300);
+        files[shot.name] = scratch(`shot-${shot.name}.png`);
+        await page.screenshot({ path: files[shot.name] });
+        // Checked after the capture: if the next beat hadn't started by the time the picture was done, the picture is right.
+        const tooLate = shot.before ? (await page.locator(shot.before).count()) > 0 : false;
+        await context.close();
+        if (errors.length) throw new Error(`${shot.name}: ${errors.join("; ")}`);
+        if (!tooLate) break;
+        if (attempt >= 4) throw new Error(`${shot.name}: the moment kept passing before the picture was taken`);
+      }
     }
     return files;
   })());
 }
+
+/**
+ * A bluff being called, as the player sees it: the playground's reveal fixture plays its whole choreography from the
+ * moment it loads, and a CDP screencast records it (Playwright's own video recorder needs a bundled ffmpeg).
+ * Frames land in scratch with their timestamps; optimize.py trims the lead-in and resamples them at a steady rate.
+ */
+async function captureClip() {
+  const base = await playgroundUrl();
+  const dir = scratch("clip");
+  mkdirSync(dir, { recursive: true });
+  const context = await (await browser()).newContext({
+    viewport: { width: MOBILE.width, height: MOBILE.height },
+    deviceScaleFactor: 1,
+    colorScheme: "dark",
+    locale: "en-US",
+  });
+  await context.addInitScript(TIPS_SEEN);
+  // Same look as the stills: let the ambient background show through the playground's opaque body.
+  await context.addInitScript(() =>
+    document.addEventListener("DOMContentLoaded", () => {
+      const style = document.createElement("style");
+      style.textContent = "body { background: transparent !important }";
+      document.head.append(style);
+    }),
+  );
+  const page = await context.newPage();
+  const client = await context.newCDPSession(page);
+  const frames = [];
+  let first;
+  client.on("Page.screencastFrame", ({ data, metadata, sessionId }) => {
+    first ??= metadata.timestamp;
+    const file = path.join(dir, `f${String(frames.length).padStart(5, "0")}.jpg`);
+    writeFileSync(file, Buffer.from(data, "base64"));
+    frames.push({ t: metadata.timestamp - first, file });
+    client.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
+  });
+  await client.send("Page.startScreencast", { format: "jpeg", quality: 92, maxWidth: MOBILE.width, maxHeight: MOBILE.height });
+  await page.goto(new URL("dev/game.html?state=reveal-bluff", base).href, { waitUntil: "commit" });
+  await page.waitForTimeout((CLIP.seconds + 2) * 1000);
+  await client.send("Page.stopScreencast");
+  await context.close();
+  const manifest = path.join(dir, "frames.json");
+  writeFileSync(manifest, JSON.stringify(frames));
+  return manifest;
+}
+
+// `skip`: the fixture's first paint shows the table for a moment before the overlay takes over — a real call arrives on a table already in view.
+const CLIP = { seconds: 4.2, skip: 0.2, fps: 15, width: 300 };
 
 async function buildScreens() {
   console.log("screens");
@@ -217,6 +299,9 @@ async function buildScreens() {
     optimize("webp", files[shot.name], file, "--quality", shot.desktop ? "90" : "92");
     report(file, `${view.width * view.scale}×${view.height * view.scale}`);
   }
+  const file = "docs/screenshots/bluff-called.webp";
+  optimize("anim", await captureClip(), file, "--seconds", String(CLIP.seconds), "--skip", String(CLIP.skip), "--fps", String(CLIP.fps), "--width", String(CLIP.width), "--quality", "64");
+  report(file, `${CLIP.width}×${Math.round((CLIP.width * MOBILE.height) / MOBILE.width)}, ${CLIP.seconds}s at ${CLIP.fps} fps`);
 }
 
 // ------------------------------------------------------------------------------------------ social images
