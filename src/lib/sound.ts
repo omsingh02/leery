@@ -7,7 +7,8 @@ export { CUE_NAMES } from "./sound/cues";
 
 /**
  * Leery's audio: a small WebAudio synth — no audio files to load. Browsers only allow audio after a
- * user gesture, so call `sfx.unlock()` from a tap/click (the app does this on the first pointerup).
+ * user gesture, so call `sfx.unlock()` from a tap/click (the app does this on the first pointerup, after
+ * `sfx.prepare()` on the first pointerdown has built the engine).
  * Cues are described in src/lib/sound/cues.ts; the vocabulary is src/lib/feel/contract.ts.
  */
 
@@ -31,23 +32,64 @@ function wirePrefs(): void {
   });
 }
 
+/** Run `fn` once the frame being prepared has painted, so heavy setup never delays what the player just did. */
+function afterPaint(fn: () => void): void {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    fn();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(run, 0));
+  // A background tab never paints; don't wait for it.
+  setTimeout(run, 250);
+}
+
+/** Create the context and the engine around it. Costs tens of milliseconds (more on a phone), so never call it from an input handler. */
+function build(): Engine | null {
+  if (typeof window === "undefined") return null;
+  const Ctor: AudioCtor | undefined = window.AudioContext ?? (window as unknown as { webkitAudioContext?: AudioCtor }).webkitAudioContext;
+  if (!Ctor) return null;
+  try {
+    const built = new Engine(new Ctor({ latencyHint: "interactive" }));
+    for (const [name, state] of bedWishes) built.bed(name, state);
+    return built;
+  } catch {
+    return null;
+  }
+}
+
+let building = false;
+/** Build the engine right after the current frame has painted (once), instead of inside whatever handler asked for a sound. */
+function buildSoon(): void {
+  if (engine || building) return;
+  building = true;
+  afterPaint(() => {
+    building = false;
+    try {
+      audio(true);
+    } catch {
+      /* audio is best-effort */
+    }
+  });
+}
+
 function audio(fromGesture = false): Engine | null {
   wirePrefs();
   if (!prefs.get().sound) return null;
   if (!engine) {
-    // Creating a context before any user interaction only produces an autoplay warning; cues that fire
-    // from timers (e.g. before the first tap after a reload) are simply skipped until the user has interacted.
-    const ua = typeof navigator !== "undefined" ? navigator.userActivation : undefined;
-    if (!fromGesture && ua && !ua.hasBeenActive) return null;
-    if (typeof window === "undefined") return null;
-    const Ctor: AudioCtor | undefined = window.AudioContext ?? (window as unknown as { webkitAudioContext?: AudioCtor }).webkitAudioContext;
-    if (!Ctor) return null;
-    try {
-      engine = new Engine(new Ctor({ latencyHint: "interactive" }));
-    } catch {
+    if (fromGesture) {
+      engine = build();
+      if (!engine) return null;
+    } else {
+      // Creating a context before any user interaction only produces an autoplay warning; cues that fire
+      // from timers (e.g. before the first tap after a reload) are simply skipped until the user has interacted.
+      const ua = typeof navigator !== "undefined" ? navigator.userActivation : undefined;
+      if (ua && !ua.hasBeenActive) return null;
+      // The player has interacted but there's no engine yet: this cue is dropped, the next ones play.
+      buildSoon();
       return null;
     }
-    for (const [name, state] of bedWishes) engine.bed(name, state);
   }
   engine.wake();
   return engine;
@@ -70,6 +112,14 @@ export const sfx = {
     } catch {
       /* audio is best-effort */
     }
+  },
+  /**
+   * Build the engine while a first tap is still down. Creating an AudioContext takes tens of milliseconds
+   * (more on a phone) — done at release it would delay the very first response; done here it hides inside
+   * the press. The context stays suspended until `unlock()`.
+   */
+  prepare(): void {
+    if (prefs.get().sound) buildSoon();
   },
   /** Call from a user gesture so later cues are allowed to play. */
   unlock(): void {

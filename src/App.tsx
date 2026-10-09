@@ -11,16 +11,22 @@ import { NotFound } from "@/pages/NotFound";
 import { RoomPage } from "@/pages/RoomPage";
 
 export default function App() {
-  // Browsers only allow audio after a user gesture: unlock the synth on the first tap.
+  // Browsers only allow audio after a user gesture: build the synth while the first tap is down, unlock it on release.
   useEffect(() => {
     const cleanup = () => {
+      window.removeEventListener("pointerdown", prepare, true);
       window.removeEventListener("pointerup", unlock);
       window.removeEventListener("keydown", unlock);
+    };
+    const prepare = () => {
+      sfx.prepare();
+      window.removeEventListener("pointerdown", prepare, true);
     };
     const unlock = () => {
       sfx.unlock();
       cleanup();
     };
+    window.addEventListener("pointerdown", prepare, true);
     window.addEventListener("pointerup", unlock);
     window.addEventListener("keydown", unlock);
     return cleanup;
