@@ -7,7 +7,7 @@ import { feel } from "@/lib/feel";
 import { useFx } from "@/lib/fx";
 import { haptics } from "@/lib/haptics";
 import { hints } from "@/lib/hints";
-import { prefs, usePrefs, type EffectsPref } from "@/lib/prefs";
+import { prefs, useEffectsReduced, usePrefs, type EffectsPref } from "@/lib/prefs";
 import { sfx } from "@/lib/sound";
 import { cn } from "@/lib/utils";
 import { useReturnFocus } from "./useReturnFocus";
@@ -41,6 +41,7 @@ function Row({ icon, title, body, children, id }: { icon: React.ReactNode; title
 export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const returnFocus = useReturnFocus();
   const p = usePrefs();
+  const reduced = useEffectsReduced();
   const fx = useFx();
   const canVibrate = haptics.supported();
   const [tipsReset, setTipsReset] = useState(false);
@@ -94,13 +95,29 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 <p className="mt-0.5 text-xs leading-snug text-muted">Shake, flashes and sparks. “Auto” follows your device's reduce-motion setting.</p>
               </div>
             </div>
-            <div role="radiogroup" aria-label="Screen effects" className="mt-3 grid grid-cols-3 gap-1.5 rounded-xl bg-black/30 p-1">
+            <div
+              role="radiogroup"
+              aria-label="Screen effects"
+              className="mt-3 grid grid-cols-3 gap-1.5 rounded-xl bg-black/30 p-1"
+              onKeyDown={(e) => {
+                // Radio-group keyboard model: arrows move the choice (and focus) instead of tabbing through every option.
+                const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+                if (!step) return;
+                e.preventDefault();
+                const at = EFFECTS.findIndex((o) => o.value === p.effects);
+                const next = EFFECTS[(at + step + EFFECTS.length) % EFFECTS.length];
+                prefs.set({ effects: next.value });
+                feel.emit({ type: "ui.tap" });
+                e.currentTarget.querySelector<HTMLElement>(`[data-testid="setting-effects-${next.value}"]`)?.focus();
+              }}
+            >
               {EFFECTS.map((o) => (
                 <button
                   key={o.value}
                   type="button"
                   role="radio"
                   aria-checked={p.effects === o.value}
+                  tabIndex={p.effects === o.value ? 0 : -1}
                   data-testid={`setting-effects-${o.value}`}
                   onClick={() => {
                     prefs.set({ effects: o.value });
@@ -116,9 +133,10 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               ))}
             </div>
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
-              className="mt-2 w-full"
+              className="mt-2.5 w-full"
+              disabled={reduced}
               onClick={() => {
                 const at = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
                 fx.shake(0.55, 320);
@@ -126,7 +144,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 fx.burst("sparks", at, { count: 22, power: 0.8, spread: 360, color: ["hsl(348 100% 62%)", "#ec4899", "#f4efe4"] });
               }}
             >
-              Preview effects
+              {reduced ? "Effects are reduced" : "Preview effects"}
             </Button>
           </div>
 

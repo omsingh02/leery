@@ -88,6 +88,16 @@ test.describe("Leery game feel (real UI ↔ real engine)", () => {
     await expect(sound).toHaveAttribute("aria-checked", "false");
     await page.getByTestId("setting-effects-reduced").click();
     await expect(page.getByTestId("setting-effects-reduced")).toHaveAttribute("aria-checked", "true");
+
+    // The effects choice is a radio group: arrow keys move the selection (and focus) between its options.
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.getByTestId("setting-effects-full")).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("setting-effects-full")).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByTestId("setting-effects-reduced")).toHaveAttribute("aria-checked", "true");
+    // With effects reduced there is nothing to preview, and the button says so.
+    await expect(page.getByRole("button", { name: /effects are reduced/i })).toBeDisabled();
+
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("settings-dialog")).toBeHidden();
 

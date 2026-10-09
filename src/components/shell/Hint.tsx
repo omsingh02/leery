@@ -32,7 +32,7 @@ export function Hint({
           exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.14 } }}
           transition={spring.pop}
           className={cn(
-            "pointer-events-none absolute z-30 flex max-w-[19rem] items-start gap-2 rounded-2xl bg-primary px-3.5 py-2.5 text-left text-xs font-semibold leading-snug text-primary-foreground shadow-glow-primary",
+            "pointer-events-none absolute z-30 flex max-w-[19rem] items-start gap-2 rounded-2xl bg-[hsl(265_80%_60%)] px-3.5 py-2.5 text-left text-xs font-semibold leading-snug text-primary-foreground shadow-glow-primary",
             className,
           )}
         >
@@ -40,7 +40,7 @@ export function Hint({
           <span>{children}</span>
           <span
             aria-hidden
-            className={cn("absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[2px] bg-primary", arrow === "down" ? "-bottom-1.5" : "-top-1.5")}
+            className={cn("absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[2px] bg-[hsl(265_80%_60%)]", arrow === "down" ? "-bottom-1.5" : "-top-1.5")}
           />
         </motion.div>
       )}

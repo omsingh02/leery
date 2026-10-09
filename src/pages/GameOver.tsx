@@ -24,7 +24,8 @@ function Headline({ text, reduced, className }: { text: string; reduced: boolean
   const words = text.split(" ");
   let n = 0;
   return (
-    <span aria-label={text} className={className}>
+    <span className={className}>
+      <span className="sr-only">{text}</span>
       {words.map((word, wi) => (
         <Fragment key={wi}>
           {wi > 0 ? " " : null}
@@ -228,9 +229,9 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
                     "relative grid h-7 w-7 shrink-0 place-items-center rounded-full font-display text-xs font-bold",
                     isWinner ? "bg-gold text-ink" : "bg-white/10 text-muted",
                   )}
-                  aria-label={`Place ${placeOf(p.id, p.cards)}`}
                 >
-                  {isWinner ? <Trophy className="h-3.5 w-3.5" aria-hidden /> : placeOf(p.id, p.cards)}
+                  <span className="sr-only">Place {placeOf(p.id, p.cards)}</span>
+                  {isWinner ? <Trophy className="h-3.5 w-3.5" aria-hidden /> : <span aria-hidden>{placeOf(p.id, p.cards)}</span>}
                 </span>
                 <Avatar name={p.name} color={p.color} bot={p.bot} size={34} />
                 <div className="relative flex min-w-0 flex-1 items-center gap-1.5">

@@ -122,6 +122,8 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
         </div>
       </header>
 
+      <h1 className="sr-only">Lobby for room {code}</h1>
+
       <div className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start items-start gap-4 pb-6 pt-1 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-6 lg:pt-8">
         {/* ------------------------------------------------ room code + invite */}
         <section
@@ -135,7 +137,7 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
             type="button"
             data-testid="room-code"
             onClick={() => void copyCode()}
-            aria-label={`Room code ${code.split("").join(" ")}. Tap to copy.`}
+            aria-label={`Room code ${code}. Tap to copy.`}
             className="mx-auto mt-3 flex gap-1.5 rounded-2xl outline-offset-4 sm:gap-2"
           >
             {code.split("").map((ch, i) => (
@@ -200,12 +202,13 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
               <li
                 key={`empty-${i}`}
                 aria-hidden
-                className={cn(
-                  "flex h-[58px] animate-pulse items-center gap-3 rounded-2xl border border-dashed border-white/10 px-3 text-sm text-muted/70",
-                  i >= 2 && "max-lg:hidden",
-                )}
-                style={{ animationDelay: `${i * 160}ms`, animationDuration: "2.6s" }}
+                className={cn("relative flex h-[58px] items-center gap-3 rounded-2xl px-3 text-sm text-muted/85", i >= 2 && "max-lg:hidden")}
               >
+                {/* Only the outline breathes: pulsing the text itself would dip it below readable contrast. */}
+                <span
+                  className="absolute inset-0 animate-pulse rounded-2xl border border-dashed border-white/10"
+                  style={{ animationDelay: `${i * 160}ms`, animationDuration: "2.6s" }}
+                />
                 <span className="grid h-[42px] w-[42px] place-items-center rounded-full border border-dashed border-white/15" />
                 Waiting for player…
               </li>

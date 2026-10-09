@@ -303,6 +303,7 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
       </header>
 
       <main className="relative flex min-h-0 flex-1 flex-col">
+        <h1 className="sr-only">Leery, room {view.code}</h1>
         <Table
           view={shown}
           serverNow={room.serverNow}
