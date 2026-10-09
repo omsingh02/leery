@@ -82,3 +82,7 @@ export const clearLastRoom = () => write("room", null);
 
 export const isMuted = (): boolean => read("muted") === "1";
 export const setMutedPref = (muted: boolean) => write("muted", muted ? "1" : "0");
+
+/** Generic small string preference (namespaced like everything else here). */
+export const getPref = (key: string): string | null => read(`pref.${key}`);
+export const setPref = (key: string, value: string | null) => write(`pref.${key}`, value);
