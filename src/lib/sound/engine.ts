@@ -38,14 +38,19 @@ export class Engine {
     return this.pool.size;
   }
 
-  /** Make sure the context is running (browsers suspend it until a gesture, and again when backgrounded). */
-  wake(): void {
-    if (this.ctx.state !== "running") void this.ctx.resume().catch(() => undefined);
+  /** Make sure the context is running (browsers suspend it until a gesture, and again when backgrounded). Resolves when it is, or can't be. */
+  wake(): Promise<void> {
+    if (this.ctx.state === "running") return Promise.resolve();
+    try {
+      return Promise.resolve(this.ctx.resume()).catch(() => undefined);
+    } catch {
+      return Promise.resolve();
+    }
   }
 
   /** iOS needs a real (silent) buffer started inside a gesture to unlock output. */
-  unlock(): void {
-    this.wake();
+  unlock(): Promise<void> {
+    const running = this.wake();
     try {
       const src = this.ctx.createBufferSource();
       src.buffer = this.ctx.createBuffer(1, 1, 22050);
@@ -54,6 +59,7 @@ export class Engine {
     } catch {
       /* best effort */
     }
+    return running;
   }
 
   play(cue: Cue, raw?: CueOptions): void {
@@ -61,7 +67,7 @@ export class Engine {
     if (!spec || this.silenced) return;
     // A suspended context freezes its clock: anything scheduled now would all burst out, late, on resume.
     if (this.ctx.state !== "running") {
-      this.wake();
+      void this.wake();
       return;
     }
     const o = resolveOpts(raw);

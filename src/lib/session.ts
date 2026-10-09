@@ -86,3 +86,9 @@ export const setMutedPref = (muted: boolean) => write("muted", muted ? "1" : "0"
 /** Generic small string preference (namespaced like everything else here). */
 export const getPref = (key: string): string | null => read(`pref.${key}`);
 export const setPref = (key: string, value: string | null) => write(`pref.${key}`, value);
+
+/** Calls `handler` when another tab changes (or clears) this site's storage. No-op where there are no storage events. */
+export function onStorageChange(handler: (key: string | null) => void): void {
+  if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+  window.addEventListener("storage", (e) => handler(e.key));
+}

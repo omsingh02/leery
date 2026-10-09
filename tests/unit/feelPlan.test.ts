@@ -43,7 +43,50 @@ const EVENTS: FeelEvent[] = [
   { type: "game.lose" },
 ];
 
+// One entry per event type — adding a FeelEvent without a sample here fails to compile, so nothing goes untested.
+const SAMPLE: Record<FeelEvent["type"], FeelEvent> = {
+  "ui.tap": { type: "ui.tap" },
+  "ui.toggle": { type: "ui.toggle", on: true },
+  "ui.error": { type: "ui.error" },
+  "ui.copy": { type: "ui.copy" },
+  "lobby.join": { type: "lobby.join" },
+  "lobby.leave": { type: "lobby.leave" },
+  "card.select": { type: "card.select", n: 2 },
+  "card.deselect": { type: "card.deselect", n: 1 },
+  "card.limit": { type: "card.limit" },
+  "card.wave": { type: "card.wave", n: 3 },
+  "drag.arm": { type: "drag.arm" },
+  "drag.disarm": { type: "drag.disarm" },
+  "cards.throw": { type: "cards.throw", n: 2, mine: true },
+  "cards.land": { type: "cards.land", n: 3, mine: true, at },
+  "turn.mine": { type: "turn.mine" },
+  "turn.other": { type: "turn.other" },
+  "timer.tick": { type: "timer.tick", seconds: 3, urgency: 0.8 },
+  "timer.out": { type: "timer.out" },
+  "accept.mine": { type: "accept.mine" },
+  "accept.other": { type: "accept.other" },
+  call: { type: "call", mine: true, at },
+  "reveal.drumroll": { type: "reveal.drumroll", dur: 0.4 },
+  "reveal.flip": { type: "reveal.flip", i: 0, ok: true, at },
+  "reveal.verdict": { type: "reveal.verdict", bluff: true, at },
+  "pickup.sweep": { type: "pickup.sweep", n: 5, dur: 0.6 },
+  "pickup.land": { type: "pickup.land", n: 5, at, mine: true, bluff: false },
+  "count.tick": { type: "count.tick", step: 2 },
+  lastCard: { type: "lastCard", at },
+  "deal.shuffle": { type: "deal.shuffle" },
+  "deal.wave": { type: "deal.wave", i: 1 },
+  "game.win": { type: "game.win", at },
+  "game.lose": { type: "game.lose" },
+};
+
 describe("feel plan", () => {
+  it("every event type is covered by a sample, and each does something", () => {
+    for (const e of Object.values(SAMPLE)) {
+      const p = plan(e);
+      expect(p.cues.length + (p.haptic ? 1 : 0) + p.fx.length, e.type).toBeGreaterThan(0);
+    }
+  });
+
   it("every event has at least one channel and well-formed numbers", () => {
     for (const e of EVENTS) {
       const p = plan(e);

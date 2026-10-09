@@ -24,12 +24,12 @@ export const REDUCED_SCALE = 0.6;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
-/** `level` 0…1 → a multiplier on the on-times: 0 → 0.6, 0.5 (nominal) → 1, 1 → 1.4. */
-export const levelScale = (level: number | undefined): number => 0.6 + 0.8 * clamp(level ?? 0.5, 0, 1);
+/** `level` 0…1 → a multiplier on the on-times: 0 → 0.6, 0.5 (nominal) → 1, 1 → 1.4. (Anything not a number counts as nominal.) */
+export const levelScale = (level: number | undefined): number => 0.6 + 0.8 * clamp(Number.isFinite(level) ? (level as number) : 0.5, 0, 1);
 
 /** Nominal patterns (level 0.5). Short and crisp. */
 export function patternFor(name: HapticName, opts: HapticOptions = {}): Pattern {
-  const n = opts.n;
+  const n = Number.isFinite(opts.n) ? opts.n : undefined;
   let base: Pattern;
   switch (name) {
     case "tap": base = [6]; break;
@@ -91,6 +91,11 @@ export interface NavigatorLike {
   maxTouchPoints?: number;
 }
 
+/** `navigator.vibrate` exists on desktop Chromium too, where there is no motor to drive: ask for a touch device. */
+export function canVibrate(nav: { vibrate?: unknown; maxTouchPoints?: number }): boolean {
+  return typeof nav.vibrate === "function" && (nav.maxTouchPoints ?? 0) > 0;
+}
+
 /** iPhone, iPad, iPod — including iPadOS pretending to be a Mac. */
 export function isIOSLike(nav: NavigatorLike): boolean {
   return /iP(hone|ad|od)/.test(nav.userAgent ?? "") || (nav.platform === "MacIntel" && (nav.maxTouchPoints ?? 0) > 1);
@@ -115,12 +120,15 @@ export interface HapticsDeps {
 export interface Haptics {
   play(name: HapticName, opts?: HapticOptions): void;
   supported(): boolean;
+  /** `vibrate`: patterns (Android). `tick`: only a light tap on a few events (iOS). `none`: this device can't. */
+  kind(): "vibrate" | "tick" | "none";
 }
 
 export function createHaptics(deps: HapticsDeps): Haptics {
   let last = -Infinity;
   return {
     supported: () => Boolean(deps.vibrate || deps.iosTick),
+    kind: () => (deps.vibrate ? "vibrate" : deps.iosTick ? "tick" : "none"),
     play(name, opts) {
       try {
         if (!deps.enabled()) return;
@@ -134,6 +142,8 @@ export function createHaptics(deps: HapticsDeps): Haptics {
           let pattern = patternFor(name, opts);
           if (reduced) pattern = scalePattern(pattern, REDUCED_SCALE, name === "lose");
           pattern = capPattern(pattern);
+          // vibrate([]) or a NaN would cancel whatever is buzzing: never send nothing.
+          if (!pattern.length || pattern.some((v) => !Number.isFinite(v))) return;
           last = t;
           deps.vibrate(pattern.length === 1 ? pattern[0] : pattern);
         } else if (deps.iosTick && IOS_TICKS.has(name)) {
@@ -179,7 +189,7 @@ let iosTick: (() => void) | undefined | null = null; // null = not probed yet
 function defaultDeps(): HapticsDeps {
   return {
     get vibrate() {
-      return typeof navigator !== "undefined" && typeof navigator.vibrate === "function" ? (p: number | number[]) => navigator.vibrate(p) : undefined;
+      return typeof navigator !== "undefined" && canVibrate(navigator) ? (p: number | number[]) => navigator.vibrate(p) : undefined;
     },
     get iosTick() {
       if (iosTick === null) iosTick = makeIosTick();

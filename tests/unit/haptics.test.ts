@@ -6,6 +6,7 @@ import {
   MAX_TOTAL_MS,
   MIN_GAP_MS,
   REDUCED_SCALE,
+  canVibrate,
   capPattern,
   createHaptics,
   haptics,
@@ -262,7 +263,7 @@ describe("the app-wide instance", () => {
 
   it("follows the preferences and the platform", () => {
     const vibrate = vi.fn(() => true);
-    vi.stubGlobal("navigator", { vibrate, userActivation: { hasBeenActive: true } });
+    vi.stubGlobal("navigator", { vibrate, maxTouchPoints: 5, userActivation: { hasBeenActive: true } });
     prefs.set({ haptics: false });
     haptics.play("call");
     expect(vibrate).not.toHaveBeenCalled();
@@ -275,6 +276,50 @@ describe("the app-wide instance", () => {
   it("reports no support without a vibration API", () => {
     vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (X11; Linux x86_64)" });
     expect(haptics.supported()).toBe(false);
+    expect(haptics.kind()).toBe("none");
     expect(() => haptics.play("call")).not.toThrow();
+  });
+
+  it("doesn't claim support on a desktop browser that has the API but no motor", () => {
+    const vibrate = vi.fn(() => true);
+    vi.stubGlobal("navigator", { vibrate, maxTouchPoints: 0, userActivation: { hasBeenActive: true } });
+    expect(haptics.supported()).toBe(false);
+    haptics.play("call");
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+});
+
+describe("what counts as vibration support", () => {
+  it("needs the API and a touch screen", () => {
+    expect(canVibrate({ vibrate: () => true, maxTouchPoints: 5 })).toBe(true);
+    expect(canVibrate({ vibrate: () => true, maxTouchPoints: 0 })).toBe(false);
+    expect(canVibrate({ vibrate: () => true })).toBe(false);
+    expect(canVibrate({ maxTouchPoints: 5 })).toBe(false);
+  });
+
+  it("tells patterns, ticks and nothing apart", () => {
+    const base = { now: () => 1, enabled: () => true, reduced: () => false, activated: () => true };
+    expect(createHaptics({ ...base, vibrate: () => true }).kind()).toBe("vibrate");
+    expect(createHaptics({ ...base, iosTick: () => undefined }).kind()).toBe("tick");
+    expect(createHaptics({ ...base }).kind()).toBe("none");
+  });
+});
+
+describe("hostile inputs", () => {
+  it("never produces a NaN or empty pattern, and never sends one to the motor", () => {
+    for (const name of ["land", "pickup", "play", "tap", "call"] as const) {
+      for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -3]) {
+        const p = patternFor(name, { n: bad, level: bad });
+        expect(p.length).toBeGreaterThan(0);
+        expect(p.every((v) => Number.isFinite(v) && v >= 0)).toBe(true);
+      }
+    }
+    const vibrate = vi.fn(() => true);
+    const h = createHaptics({ vibrate, now: () => 100, enabled: () => true, reduced: () => false, activated: () => true });
+    h.play("pickup", { n: Number.NaN, level: Number.NaN });
+    for (const call of vibrate.mock.calls as unknown[][]) {
+      const arg = call[0] as number | number[];
+      expect([arg].flat().every((v) => Number.isFinite(v))).toBe(true);
+    }
   });
 });

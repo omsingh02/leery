@@ -34,12 +34,24 @@ function runFx(fx: FxController, step: FxStep) {
 export const feel = {
   emit(event: FeelEvent, delay = 0): void {
     const p = plan(event);
+    // Feedback is decoration: a failure in one channel (or one step) must never stop another, or the caller —
+    // `callBluff` emits before it sends the request.
     const run = () => {
       for (const [cue, opts] of p.cues) sfx.play(cue, opts);
       if (p.haptic) haptics.play(p.haptic[0], p.haptic[1]);
       if (p.fx.length) {
-        const fx = getFx();
-        for (const step of p.fx) runFx(fx, step);
+        try {
+          const fx = getFx();
+          for (const step of p.fx) {
+            try {
+              runFx(fx, step);
+            } catch {
+              /* a cosmetic effect failed */
+            }
+          }
+        } catch {
+          /* no effects layer */
+        }
       }
     };
     if (delay > 0) window.setTimeout(run, delay * 1000);

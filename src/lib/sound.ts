@@ -22,6 +22,12 @@ type AudioCtor = typeof AudioContext;
 function wirePrefs(): void {
   if (wired) return;
   wired = true;
+  // A phone call, a locked screen or another tab can leave the context suspended or "interrupted": wake it when we're back.
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && prefs.get().sound) void engine?.wake();
+    });
+  }
   let wasOn = prefs.get().sound;
   prefs.subscribe(() => {
     const on = prefs.get().sound;
@@ -45,16 +51,24 @@ function afterPaint(fn: () => void): void {
   setTimeout(run, 250);
 }
 
+/** A build that threw (no Web Audio features, too many open contexts…) isn't retried by cues; only an explicit unlock() tries again. */
+let buildFailed = false;
+
 /** Create the context and the engine around it. Costs tens of milliseconds (more on a phone), so never call it from an input handler. */
 function build(): Engine | null {
   if (typeof window === "undefined") return null;
   const Ctor: AudioCtor | undefined = window.AudioContext ?? (window as unknown as { webkitAudioContext?: AudioCtor }).webkitAudioContext;
   if (!Ctor) return null;
+  let ctx: AudioContext | undefined;
   try {
-    const built = new Engine(new Ctor({ latencyHint: "interactive" }));
+    ctx = new Ctor({ latencyHint: "interactive" });
+    const built = new Engine(ctx);
     for (const [name, state] of bedWishes) built.bed(name, state);
+    buildFailed = false;
     return built;
   } catch {
+    buildFailed = true;
+    void ctx?.close().catch(() => undefined); // browsers cap the number of live contexts: never strand one
     return null;
   }
 }
@@ -74,11 +88,12 @@ function buildSoon(): void {
   });
 }
 
-function audio(fromGesture = false): Engine | null {
+function audio(fromGesture = false, retry = false): Engine | null {
   wirePrefs();
   if (!prefs.get().sound) return null;
   if (!engine) {
     if (fromGesture) {
+      if (buildFailed && !retry) return null;
       engine = build();
       if (!engine) return null;
     } else {
@@ -87,11 +102,11 @@ function audio(fromGesture = false): Engine | null {
       const ua = typeof navigator !== "undefined" ? navigator.userActivation : undefined;
       if (ua && !ua.hasBeenActive) return null;
       // The player has interacted but there's no engine yet: this cue is dropped, the next ones play.
-      buildSoon();
+      if (!buildFailed) buildSoon();
       return null;
     }
   }
-  engine.wake();
+  void engine.wake();
   return engine;
 }
 
@@ -108,7 +123,8 @@ export const sfx = {
   bed(name: BedName, state: BedState): void {
     try {
       bedWishes.set(name, { ...bedWishes.get(name), ...state });
-      audio()?.bed(name, state);
+      // Even while muted the engine has to hear it: it keeps the latest wish and restores that one on unmute.
+      (audio() ?? engine)?.bed(name, state);
     } catch {
       /* audio is best-effort */
     }
@@ -121,12 +137,15 @@ export const sfx = {
   prepare(): void {
     if (prefs.get().sound) buildSoon();
   },
-  /** Call from a user gesture so later cues are allowed to play. */
-  unlock(): void {
+  /**
+   * Call from a user gesture so later cues are allowed to play. Resolves once the audio is actually running,
+   * so a cue meant to confirm the tap (turning sound on) can wait for it instead of being dropped.
+   */
+  unlock(): Promise<void> {
     try {
-      audio(true)?.unlock();
+      return audio(true, true)?.unlock() ?? Promise.resolve();
     } catch {
-      /* audio is best-effort */
+      return Promise.resolve(); /* audio is best-effort */
     }
   },
   isMuted: (): boolean => !prefs.get().sound,

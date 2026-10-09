@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
-import { getPref, setPref } from "./session";
+import { getPref, onStorageChange, setPref } from "./session";
 
 /**
  * First-time tips. Each shows once per device, only at the moment it's useful, and never blocks
@@ -27,7 +27,8 @@ export const hints = {
   has: (id: HintId): boolean => seen.has(id),
   mark(id: HintId) {
     if (seen.has(id)) return;
-    seen = new Set([...seen, id]);
+    // Merge with what's stored: another tab may have marked other tips since this one loaded.
+    seen = new Set([...load(), ...seen, id]);
     setPref(KEY, JSON.stringify([...seen]));
     emit();
   },
@@ -41,6 +42,13 @@ export const hints = {
     return () => listeners.delete(l);
   },
 };
+
+// Another tab marked or reset the tips: follow it.
+onStorageChange((key) => {
+  if (key !== null && !key.startsWith("leery.pref.hints")) return;
+  seen = load();
+  emit();
+});
 
 /** `show` is true while the hint is wanted (`when`) and hasn't been seen; `done()` marks it seen. */
 export function useHint(id: HintId, when: boolean): { show: boolean; done: () => void } {

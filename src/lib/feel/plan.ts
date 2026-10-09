@@ -217,7 +217,11 @@ export function plan(e: FeelEvent): Plan {
     }
     case "game.lose":
       return { cues: [["lose"]], haptic: ["lose"], fx: [] };
-    default:
+    default: {
+      // Adding a FeelEvent without deciding how it looks, sounds and feels is a compile error, not silence.
+      const unhandled: never = e;
+      void unhandled;
       return none;
+    }
   }
 }

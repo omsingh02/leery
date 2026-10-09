@@ -18,7 +18,7 @@ const CONTRACT_CUES: Cue[] = [
 
 /* ------------------------------------------------------------------------------ a recording fake */
 
-type Log = { kind: string; name: string; v?: number; t?: number }[];
+type Log = { kind: string; name: string; v?: number; t?: number; /** when a bounded buffer source (noise burst) stops by itself */ end?: number }[];
 
 class FakeParam {
   value: number;
@@ -83,7 +83,7 @@ class FakeNode {
   }
   disconnect(): void {}
   start(t = 0, offset = 0, dur?: number): void {
-    this.log.push({ kind: "start", name: this.kind, v: dur ?? offset, t });
+    this.log.push({ kind: "start", name: this.kind, v: dur ?? offset, t, end: dur === undefined ? undefined : t + dur });
   }
   stop(t = 0): void {
     this.log.push({ kind: "stop", name: this.kind, t });
@@ -199,7 +199,8 @@ describe("every cue schedules valid Web Audio automation", () => {
         expect(starts.length, `${cue} ${JSON.stringify(opts)} makes no sound`).toBeGreaterThan(0);
         expect(starts.length, `${cue} ${JSON.stringify(opts)} uses too many sources`).toBeLessThanOrEqual(120);
         for (const s of starts) expect(s.t ?? 0).toBeGreaterThanOrEqual(T0 - 1e-9);
-        const lastStop = Math.max(...stops.map((e) => e.t ?? 0), ...starts.map((e) => e.t ?? 0));
+        // …including noise bursts, which end by themselves (start(t, offset, duration)) rather than by stop()
+        const lastStop = Math.max(...stops.map((e) => e.t ?? 0), ...starts.map((e) => e.end ?? e.t ?? 0));
         expect(lastStop - T0, `${cue} ${JSON.stringify(opts)} outlives its declared life`).toBeLessThanOrEqual(CUES[cue].life(o));
         // every oscillator frequency we set is a plausible, audible pitch
         for (const e of log) {

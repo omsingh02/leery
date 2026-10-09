@@ -190,13 +190,13 @@ function Lab() {
 
   const opts = (): CueOptions => ({ n, level, pan, ...(useDur ? { dur } : {}) });
   const fire = (cue: Cue) => {
-    sfx.unlock();
+    void sfx.unlock();
     sfx.play(cue, opts());
     setLast(`${cue} ${JSON.stringify(opts())}`);
   };
 
   const scenario = (name: string, steps: [number, Cue, CueOptions?][], hap: [number, HapticName, { n?: number }?][] = []) => {
-    sfx.unlock();
+    void sfx.unlock();
     steps.forEach(([at, cue, o]) => sfx.play(cue, { ...o, delay: at }));
     hap.forEach(([at, h, o]) => setTimeout(() => haptics.play(h, o), at * 1000));
     setLast(`scenario: ${name}`);
@@ -312,7 +312,7 @@ function Lab() {
             <button
               className={`cue ${heart ? "on" : ""}`}
               onClick={() => {
-                sfx.unlock();
+                void sfx.unlock();
                 const next = !heart;
                 setHeart(next);
                 sfx.bed("heartbeat", { on: next, bpm, level: beat });
@@ -323,7 +323,7 @@ function Lab() {
           </div>
           <Slider label="bpm" value={bpm} min={50} max={130} step={1} onChange={(v) => { setBpm(v); sfx.bed("heartbeat", { on: heart, bpm: v, level: beat }); }} />
           <Slider label="level" value={beat} min={0} max={1} step={0.05} onChange={(v) => { setBeat(v); sfx.bed("heartbeat", { on: heart, bpm, level: v }); }} fmt={(v) => v.toFixed(2)} />
-          <button className="cue" onClick={() => { setHeart(true); sfx.unlock(); [60, 70, 80, 90, 100, 110].forEach((b, i) => setTimeout(() => { setBpm(b); sfx.bed("heartbeat", { on: true, bpm: b, level: beat }); }, i * 1200)); }}>
+          <button className="cue" onClick={() => { setHeart(true); void sfx.unlock(); [60, 70, 80, 90, 100, 110].forEach((b, i) => setTimeout(() => { setBpm(b); sfx.bed("heartbeat", { on: true, bpm: b, level: beat }); }, i * 1200)); }}>
             ramp 60 → 110 bpm
           </button>
         </div>
@@ -331,7 +331,7 @@ function Lab() {
           <button
             className={`cue ${amb ? "on" : ""}`}
             onClick={() => {
-              sfx.unlock();
+              void sfx.unlock();
               const next = !amb;
               setAmb(next);
               sfx.bed("ambience", { on: next, level: 1 });

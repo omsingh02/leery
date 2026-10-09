@@ -11,6 +11,7 @@ import { SoundToggle } from "@/components/shell/SoundToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
+import { useShakeTarget } from "@/lib/fx";
 import { clearLastRoom, getLastRoom, getName, getToken, setName } from "@/lib/session";
 import { sfx } from "@/lib/sound";
 import { CODE_LENGTH, MAX_NAME, MAX_PLAYERS } from "@/lib/types";
@@ -31,6 +32,8 @@ const rise = {
 export function Home() {
   const navigate = useNavigate();
   const nameRef = useRef<HTMLInputElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  useShakeTarget(mainRef); // so the effects preview in Settings can shake something
 
   const [name, setNameValue] = useState(() => getName());
   const [nameError, setNameError] = useState<string | null>(null);
@@ -55,7 +58,7 @@ export function Home() {
     if (busy) return;
     const clean = requireName();
     if (!clean) return;
-    sfx.unlock();
+    void sfx.unlock();
     setBusy(kind);
     try {
       setName(clean);
@@ -77,7 +80,7 @@ export function Home() {
   }
 
   return (
-    <main className="relative mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 safe-pt safe-pb sm:px-8">
+    <main ref={mainRef} className="relative mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 safe-pt safe-pb sm:px-8">
       <div className="flex flex-1 flex-col items-center justify-center gap-7 py-4 sm:gap-10 lg:flex-row lg:justify-between lg:gap-20">
         {/* ------------------------------------------------------------ hero */}
         <motion.section

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { getPref, isMuted, setMutedPref, setPref } from "./session";
+import { getPref, isMuted, onStorageChange, setMutedPref, setPref } from "./session";
 
 /**
  * Comfort settings. They are the player's, not the game's: sound, haptics and how much the screen is
@@ -65,24 +65,32 @@ export const prefs = {
   effectsReduced: (): boolean => (state.effects === "auto" ? systemReduced() : state.effects === "reduced"),
 };
 
+// Another tab changed a setting (or cleared the site data): follow it.
+onStorageChange((key) => {
+  if (key !== null && !key.startsWith("leery.")) return;
+  const next = load();
+  if (next.sound === state.sound && next.haptics === state.haptics && next.effects === state.effects) return;
+  state = next;
+  listeners.forEach((l) => l());
+});
+
 /** Re-render when any preference changes. */
 export function usePrefs(): Prefs {
   return useSyncExternalStore(prefs.subscribe, prefs.get, prefs.get);
 }
 
+/** Preference changes, and the OS setting changing underneath an "auto". (Module-level so the subscription isn't redone on every render.) */
+function subscribeReduced(cb: () => void): () => void {
+  const off = prefs.subscribe(cb);
+  const mq = reducedQuery();
+  mq?.addEventListener?.("change", cb);
+  return () => {
+    off();
+    mq?.removeEventListener?.("change", cb);
+  };
+}
+
 /** True when effects are reduced (explicitly, or via the OS setting while on "auto"). */
 export function useEffectsReduced(): boolean {
-  return useSyncExternalStore(
-    (cb) => {
-      const off = prefs.subscribe(cb);
-      const mq = reducedQuery();
-      mq?.addEventListener?.("change", cb);
-      return () => {
-        off();
-        mq?.removeEventListener?.("change", cb);
-      };
-    },
-    prefs.effectsReduced,
-    () => false,
-  );
+  return useSyncExternalStore(subscribeReduced, prefs.effectsReduced, () => false);
 }

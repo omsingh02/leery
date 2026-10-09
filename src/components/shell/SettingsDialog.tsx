@@ -43,11 +43,18 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const p = usePrefs();
   const reduced = useEffectsReduced();
   const fx = useFx();
-  const canVibrate = haptics.supported();
+  const buzz = haptics.kind();
+  const canVibrate = buzz !== "none";
   const [tipsReset, setTipsReset] = useState(false);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setTipsReset(false); // "Done" is for this visit only
+        onOpenChange(next);
+      }}
+    >
       <DialogContent title="Settings" description="Make Leery feel the way you like it." data-testid="settings-dialog" {...returnFocus}>
         <div className="space-y-2.5">
           <Row id="set-sound" icon={<Volume2 className="h-5 w-5" />} title="Sound effects" body="Card slaps, chimes and the occasional heartbeat.">
@@ -58,10 +65,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               checked={p.sound}
               onCheckedChange={(on) => {
                 prefs.set({ sound: on });
-                if (on) {
-                  sfx.unlock();
-                  feel.emit({ type: "ui.toggle", on: true });
-                }
+                if (on) void sfx.unlock().then(() => feel.emit({ type: "ui.toggle", on: true }));
               }}
             />
           </Row>
@@ -70,7 +74,13 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             id="set-haptics"
             icon={<Vibrate className="h-5 w-5" />}
             title="Vibration"
-            body={canVibrate ? "A little buzz when cards land, when it's your turn, and when a bluff is caught." : "This device doesn't support vibration."}
+            body={
+              buzz === "vibrate"
+                ? "A little buzz when cards land, when it's your turn, and when a bluff is caught."
+                : buzz === "tick"
+                  ? "A light tick when you tap, pick and play cards, and when a bluff is called."
+                  : "This device doesn't support vibration."
+            }
           >
             <Switch
               data-testid="setting-haptics"
@@ -153,6 +163,7 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               variant="secondary"
               size="sm"
               data-testid="setting-reset-tips"
+              aria-describedby="set-tips-label set-tips-desc"
               onClick={() => {
                 hints.reset();
                 setTipsReset(true);
