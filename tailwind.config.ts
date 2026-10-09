@@ -59,6 +59,41 @@ export default {
           "0%": { boxShadow: "0 0 0 0 hsl(var(--gold) / .55)" },
           "100%": { boxShadow: "0 0 0 14px hsl(var(--gold) / 0)" },
         },
+        /* game feel */
+        tremble: {
+          "0%,100%": { transform: "translateX(0)" },
+          "25%": { transform: "translateX(-1.2px)" },
+          "75%": { transform: "translateX(1.2px)" },
+        },
+        bob: { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-2.5px)" } },
+        "danger-pulse": {
+          "0%": { boxShadow: "0 0 0 0 hsl(var(--bluff) / .65)" },
+          "100%": { boxShadow: "0 0 0 10px hsl(var(--bluff) / 0)" },
+        },
+        sweat: {
+          "0%": { transform: "translateY(-2px) scale(.6)", opacity: "0" },
+          "25%": { opacity: "1" },
+          "100%": { transform: "translateY(15px) scale(1)", opacity: "0" },
+        },
+        "ping-once": {
+          "0%": { transform: "scale(.7)", opacity: ".85" },
+          "100%": { transform: "scale(2.1)", opacity: "0" },
+        },
+        arrive: {
+          "0%": { transform: "translate(var(--ax, 0px), var(--ay, 0px)) rotate(var(--ar, 0deg)) scale(.55)", opacity: "0" },
+          "55%": { opacity: "1" },
+          "100%": { transform: "translate(0, 0) rotate(0deg) scale(1)", opacity: "1" },
+        },
+        "ready-wave": {
+          "0%,100%": { transform: "translateY(0)" },
+          "40%": { transform: "translateY(-9px)" },
+        },
+        shine: { "0%": { transform: "translateX(-130%) skewX(-18deg)" }, "100%": { transform: "translateX(230%) skewX(-18deg)" } },
+        "float-up": {
+          "0%": { transform: "translateY(4px) scale(.8)", opacity: "0" },
+          "18%": { opacity: "1", transform: "translateY(-2px) scale(1.12)" },
+          "100%": { transform: "translateY(-20px) scale(1)", opacity: "0" },
+        },
       },
       animation: {
         float: "float 5s ease-in-out infinite",
@@ -68,6 +103,15 @@ export default {
         "pop-in": "pop-in .28s cubic-bezier(.2,1.3,.4,1) both",
         "spin-slow": "spin-slow 24s linear infinite",
         "ring-pulse": "ring-pulse 1.4s ease-out infinite",
+        tremble: "tremble .09s linear infinite",
+        bob: "bob 1.5s ease-in-out infinite",
+        "danger-pulse": "danger-pulse 1.1s ease-out infinite",
+        sweat: "sweat 1.15s ease-in infinite",
+        "ping-once": "ping-once .7s ease-out both",
+        arrive: "arrive .5s cubic-bezier(.2,.9,.3,1.12) both",
+        "ready-wave": "ready-wave .42s ease-out both",
+        shine: "shine 2.4s ease-in-out infinite",
+        "float-up": "float-up 1s ease-out both",
       },
     },
   },

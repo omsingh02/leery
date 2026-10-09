@@ -73,3 +73,14 @@
 .leery-scroll-x::-webkit-scrollbar {
   display: none;
 }
+
+/* Dragging picked cards up onto the table: they follow the finger/pointer, then spring home if let go too soon. */
+.hand-drag-layer {
+  position: relative;
+  transform: translate3d(var(--drag-x, 0px), var(--drag-y, 0px), 0) rotate(var(--drag-r, 0deg));
+  will-change: transform;
+  filter: drop-shadow(0 14px 16px rgb(0 0 0 / 0.5));
+}
+.hand-drag-return {
+  transition: transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}

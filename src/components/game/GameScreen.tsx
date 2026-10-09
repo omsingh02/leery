@@ -1,29 +1,35 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
-import { Check, Copy, Ellipsis, HelpCircle, LogOut, ScrollText, WifiOff } from "lucide-react";
+import { Check, Copy, Ellipsis, HelpCircle, LogOut, ScrollText, Settings, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Hint } from "@/components/shell/Hint";
 import { RulesDialog } from "@/components/shell/RulesDialog";
+import { SettingsDialog } from "@/components/shell/SettingsDialog";
 import { SoundToggle } from "@/components/shell/SoundToggle";
 import type { RoomController } from "@/hooks/useRoom";
 import { describeLog, RANK_PLURAL } from "@/lib/game";
-import { sfx } from "@/lib/sound";
+import { shakeStyle } from "@/lib/fx";
+import { hints, useHint } from "@/lib/hints";
 import type { CardCode, RoomView } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ActionBar } from "./ActionBar";
-import { FlyLayer, type Flight, type Point } from "./FlyLayer";
+import { FlyLayer, type Point } from "./FlyLayer";
 import { GameLog } from "./GameLog";
-import { Hand } from "./Hand";
+import { Hand, type DragState } from "./Hand";
 import { MyBar } from "./MyBar";
 import { myNextTurn } from "./myNext";
 import { RevealOverlay } from "./RevealOverlay";
-import { revealTimeline } from "./revealTimeline";
 import { Table } from "./Table";
+import { useDirector } from "./director/useDirector";
 import { useMediaQuery } from "./useMediaQuery";
 import "./game.css";
 
 const PLAYABLE = new Set(["turn", "challenge", "reveal"]);
+
+/** Has this first-time tip already been shown? (Read once, when deciding whether to chain the next one.) */
+const hintsSeen = (id: Parameters<typeof hints.has>[0]) => hints.has(id);
 
 function centerOf(el: Element | null | undefined, topBias = false): Point | null {
   if (!el) return null;
@@ -56,7 +62,7 @@ const headerButton =
   "grid h-10 w-10 place-items-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-foreground";
 
 /** ⋯ menu: a tiny accessible popover (Esc / outside click closes). */
-function HeaderMenu({ onRules, onLeave }: { onRules: () => void; onLeave: () => void }) {
+function HeaderMenu({ onRules, onSettings, onLeave }: { onRules: () => void; onSettings: () => void; onLeave: () => void }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -117,6 +123,18 @@ function HeaderMenu({ onRules, onLeave }: { onRules: () => void; onLeave: () => 
           <button
             role="menuitem"
             type="button"
+            data-testid="menu-settings"
+            className={item}
+            onClick={() => {
+              setOpen(false);
+              onSettings();
+            }}
+          >
+            <Settings className="h-4 w-4 text-primary" aria-hidden /> Settings
+          </button>
+          <button
+            role="menuitem"
+            type="button"
             data-testid="leave-game-menu"
             className={cn(item, "text-rose-300")}
             onClick={() => {
@@ -141,20 +159,17 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
   const [limitHits, setLimitHits] = useState(0);
   const [logOpen, setLogOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [flights, setFlights] = useState<Flight[]>([]);
+  const [dragState, setDragState] = useState<DragState>("idle");
 
   const pileRef = useRef<HTMLDivElement>(null);
   const handWrapRef = useRef<HTMLDivElement>(null);
+  const myBarRef = useRef<HTMLDivElement>(null);
   const seatEls = useRef(new Map<string, HTMLElement>());
-  const flightId = useRef(0);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const latest = useRef(view);
-  useEffect(() => {
-    latest.current = view;
-  });
   useEffect(() => () => clearTimeout(copiedTimer.current), []);
 
   const registerSeat = useCallback((id: string, el: HTMLElement | null) => {
@@ -162,10 +177,9 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
     else seatEls.current.delete(id);
   }, []);
 
-  const launch = useCallback((f: Omit<Flight, "id">) => {
-    setFlights((cur) => [...cur, { ...f, id: ++flightId.current }]);
-  }, []);
-  const endFlight = useCallback((id: number) => setFlights((cur) => cur.filter((f) => f.id !== id)), []);
+  // The director stages everything that happens at the table; `shown` is the room as it should look right now.
+  const d = useDirector({ room, view, refs: { pile: pileRef, handWrap: handWrapRef, seats: seatEls, myBar: myBarRef } });
+  const shown = d.shown;
 
   // ---- selection (lives here so it survives phase changes; pruned against the real hand) -------------
   useEffect(() => {
@@ -180,22 +194,33 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
   }, []);
   const onLimit = useCallback(() => setLimitHits((h) => h + 1), []);
 
-  const handlePlay = useCallback(async () => {
-    if (selected.length === 0) return;
-    const ok = await room.play(selected);
-    if (ok) setSelected([]);
-  }, [room, selected]);
+  /** Play: the cards leave the hand at once (the director flies them), the request follows. */
+  const play = useCallback(
+    (cards: CardCode[]) => {
+      if (cards.length === 0) return;
+      setSelected([]);
+      void d.playCards(cards);
+    },
+    [d],
+  );
 
-  // ---- "it just became my turn" -----------------------------------------------------------------------
   const myTurn = view.status === "turn" && view.turn?.player === me.id;
-  const wasMyTurn = useRef(myTurn);
+
+  // ---- first-time tips (each shows once, only when it helps) ---------------------------------------------------
+  const selectTip = useHint("select", myTurn && me.canPlay && selected.length === 0 && !d.dealing);
+  const callTip = useHint("call", view.status === "challenge" && me.canCall && !me.passed);
+  const dragTip = useHint("drag", myTurn && me.canPlay && selected.length > 0 && hintsSeen("select"));
   useEffect(() => {
-    if (myTurn && !wasMyTurn.current) {
-      sfx.play("turn");
-      navigator.vibrate?.(60);
-    }
-    wasMyTurn.current = myTurn;
-  }, [myTurn]);
+    if (selected.length > 0) selectTip.done();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mark once something is selected
+  }, [selected.length]);
+  const stageCall = useCallback(
+    async (fn: () => Promise<boolean>) => {
+      callTip.done();
+      return fn();
+    },
+    [callTip],
+  );
 
   useEffect(() => {
     const previous = document.title;
@@ -204,38 +229,6 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
       document.title = previous;
     };
   }, [myTurn, view.code]);
-
-  // ---- new plays: thud + cards flying to the pile ------------------------------------------------------
-  const lastLogN = useRef(view.log.length ? view.log[view.log.length - 1].n : 0);
-  useEffect(() => {
-    const fresh = view.log.filter((e) => e.n > lastLogN.current);
-    if (fresh.length === 0) return;
-    lastLogN.current = fresh[fresh.length - 1].n;
-    for (const e of fresh.slice(-2)) {
-      if (e.k !== "play" || !e.p) continue;
-      sfx.play("play");
-      const to = centerOf(pileRef.current);
-      const mine = e.p === me.id;
-      const from = mine ? centerOf(handWrapRef.current, true) : centerOf(seatEls.current.get(e.p));
-      if (from && to) launch({ from, to, count: e.c ?? 1, unit: mine ? 9 : 6 });
-    }
-  }, [view.log, me.id, launch]);
-
-  // ---- after a reveal: the pile flies to whoever has to pick it up -------------------------------------
-  const revealKey = view.status === "reveal" && view.reveal ? view.reveal.until : null;
-  useEffect(() => {
-    if (revealKey == null) return;
-    const t = setTimeout(() => {
-      const v = latest.current;
-      const rv = v.reveal;
-      if (!rv) return;
-      const from = centerOf(pileRef.current);
-      const to = rv.picker === v.me.id ? centerOf(handWrapRef.current, true) : centerOf(seatEls.current.get(rv.picker));
-      if (from && to) launch({ from, to, count: Math.min(rv.pickup, 4), unit: 7 });
-    }, revealTimeline(view.reveal?.cards.length ?? 1).result + 250);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the reveal's end time only; the rest is read via `latest`
-  }, [revealKey, launch]);
 
   // ---- header actions ----------------------------------------------------------------------------------
   const copyInvite = async () => {
@@ -253,11 +246,16 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
     if (ok) navigate("/");
   };
 
-  const next = myNextTurn(view);
+  const next = myNextTurn(shown);
   const latestLog = view.log.length ? view.log[view.log.length - 1] : null;
+  const visibleHand = useMemo(() => (d.hiding.size ? shown.me.hand.filter((c) => !d.hiding.has(c)) : shown.me.hand), [shown.me.hand, d.hiding]);
+  const canDrag = view.status === "turn" && me.canPlay && view.turn?.player === me.id;
+  const claimRank = view.turn?.rank;
+  const dragLabel = `${Math.max(1, selected.length)} as ${claimRank ? RANK_PLURAL[claimRank] : "the rank"}`;
+  const pileFrom: Point | null = centerOf(pileRef.current);
 
   return (
-    <div data-testid="game-screen" className="relative mx-auto flex h-dvh min-h-[520px] w-full flex-col overflow-hidden">
+    <div data-testid="game-screen" style={shakeStyle} className="relative mx-auto flex h-dvh min-h-[520px] w-full flex-col overflow-hidden">
       <header className="safe-pt relative z-40 flex shrink-0 items-center gap-1.5 px-3 pb-1 pt-1 lg:px-6">
         <button
           type="button"
@@ -284,37 +282,92 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
           <button type="button" data-testid="game-log-toggle" aria-label="Game log" onClick={() => setLogOpen(true)} className={headerButton}>
             <ScrollText className="h-5 w-5" aria-hidden />
           </button>
-          <HeaderMenu onRules={() => setRulesOpen(true)} onLeave={() => setLeaveOpen(true)} />
+          <HeaderMenu onRules={() => setRulesOpen(true)} onSettings={() => setSettingsOpen(true)} onLeave={() => setLeaveOpen(true)} />
         </div>
       </header>
 
       <main className="relative flex min-h-0 flex-1 flex-col">
-        <Table view={view} serverNow={room.serverNow} pileRef={pileRef} registerSeat={registerSeat}>
+        <Table
+          view={shown}
+          serverNow={room.serverNow}
+          pileRef={pileRef}
+          registerSeat={registerSeat}
+          pileImpact={d.pileImpact}
+          dropActive={dragState === "armed"}
+          reactions={d.reactions}
+          onCountStep={d.onCountStep}
+          quietCounts={d.dealing}
+        >
           <div className="shrink-0">
-            <MyBar view={view} />
-            <div ref={handWrapRef} className="mx-auto w-full max-w-[1100px] px-3 lg:px-0">
+            <MyBar view={shown} avatarRef={myBarRef} />
+            <div ref={handWrapRef} className="relative mx-auto w-full max-w-[1100px] px-3 lg:px-0">
+              <div
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute inset-x-0 -bottom-3 h-28 bg-gradient-to-t from-gold/[0.16] via-gold/[0.05] to-transparent transition-opacity duration-500",
+                  myTurn && me.canPlay ? "opacity-100" : "opacity-0",
+                )}
+              />
+              <Hint show={selectTip.show} testId="hint-select" className="inset-x-0 bottom-[calc(100%+2.7rem)] mx-auto w-fit">
+                Tap cards to pick 1–4, then play them face-down. You're allowed to lie!
+              </Hint>
+              <Hint show={dragTip.show && dragState === "idle"} testId="hint-drag" className="inset-x-0 bottom-[calc(100%+2.7rem)] mx-auto w-fit">
+                Tip: drag your picked cards up onto the table to play.
+              </Hint>
               <Hand
-                cards={me.hand}
+                cards={visibleHand}
                 selected={selected}
                 onToggle={toggleCard}
                 requiredRank={next?.rank ?? null}
                 interactive={view.status !== "reveal"}
                 onLimit={onLimit}
                 compact={short}
+                arrivals={d.arrivals}
+                waveKey={d.waveKey}
+                drag={{
+                  enabled: canDrag,
+                  label: dragLabel,
+                  onPlay: (cards) => {
+                    dragTip.done();
+                    play(cards);
+                  },
+                  onState: setDragState,
+                }}
               />
             </div>
-            <ActionBar room={room} view={view} selected={selected} onPlay={() => void handlePlay()} onSelectMany={setSelected} limitHits={limitHits} compact={short} />
+            <div className="relative">
+              <Hint show={callTip.show} arrow="down" testId="hint-call" className="inset-x-0 -top-12 mx-auto w-fit">
+                Think they're lying? Call bluff! Get it wrong and you pick up the pile.
+              </Hint>
+              <ActionBar
+                room={room}
+                view={view}
+                selected={selected}
+                onPlay={() => {
+                  dragTip.done();
+                  play(selected);
+                }}
+                onSelectMany={setSelected}
+                limitHits={limitHits}
+                compact={short}
+                onCall={() => stageCall(d.callBluff)}
+                onAccept={() => stageCall(d.acceptPlay)}
+              />
+            </div>
           </div>
         </Table>
 
         <AnimatePresence>
-          {view.status === "reveal" && view.reveal && <RevealOverlay key={`reveal-${view.reveal.until}`} view={view} serverNow={room.serverNow} />}
+          {view.status === "reveal" && view.reveal && (
+            <RevealOverlay key={`reveal-${view.reveal.until}`} view={view} serverNow={room.serverNow} pileFrom={pileFrom} />
+          )}
         </AnimatePresence>
       </main>
 
-      <FlyLayer flights={flights} onDone={endFlight} />
+      <FlyLayer flights={d.flights} sparks={d.sparks} onDone={d.endFlight} onSparkDone={d.endSpark} />
       <GameLog open={logOpen} onOpenChange={setLogOpen} log={view.log} />
       <RulesDialog open={rulesOpen} onOpenChange={setRulesOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 
       <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
         <DialogContent title="Leave this game?" description="A bot will take over your cards and the game goes on without you.">

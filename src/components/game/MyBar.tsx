@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, type Ref } from "react";
 import { Crown } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { RANK_PLURAL } from "@/lib/game";
@@ -7,14 +7,14 @@ import { cn } from "@/lib/utils";
 import { myNextTurn } from "./myNext";
 
 /** A slim line above my hand: who I am, which rank I'll need next, and how many cards I hold. */
-export const MyBar = memo(function MyBar({ view }: { view: RoomView }) {
+export const MyBar = memo(function MyBar({ view, avatarRef }: { view: RoomView; avatarRef?: Ref<HTMLDivElement> }) {
   const mine = view.players.find((p) => p.id === view.me.id);
   const myTurn = view.status === "turn" && view.turn?.player === view.me.id;
   const next = myNextTurn(view);
   const count = view.me.hand.length;
   return (
     <div className="mx-auto flex w-full max-w-xl shrink-0 items-center gap-2 px-4 pt-1">
-      <div className={cn("relative shrink-0 rounded-full", myTurn && "ring-2 ring-gold ring-offset-2 ring-offset-background")}>
+      <div ref={avatarRef} className={cn("relative shrink-0 rounded-full transition-shadow", myTurn && "ring-2 ring-gold ring-offset-2 ring-offset-background animate-ring-pulse")}>
         <Avatar name={mine?.name ?? "You"} color={mine?.color ?? 0} bot={false} size={28} />
       </div>
       <span className={cn("max-w-[7rem] truncate text-sm font-semibold", myTurn ? "text-gold" : "text-foreground")}>{mine?.name ?? "You"}</span>

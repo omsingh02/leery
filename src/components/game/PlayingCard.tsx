@@ -4,6 +4,7 @@ import {
   type CSSProperties,
   type FocusEventHandler,
   type KeyboardEventHandler,
+  type PointerEventHandler,
   type Ref,
 } from "react";
 import { Crown } from "lucide-react";
@@ -33,6 +34,10 @@ export interface PlayingCardProps {
   tabIndex?: number;
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
   onFocus?: FocusEventHandler<HTMLButtonElement>;
+  onPointerDown?: PointerEventHandler<HTMLButtonElement>;
+  onPointerMove?: PointerEventHandler<HTMLButtonElement>;
+  onPointerUp?: PointerEventHandler<HTMLButtonElement>;
+  onPointerCancel?: PointerEventHandler<HTMLButtonElement>;
 }
 
 /** Index in the corner: rank above suit. The bottom-right one is the same thing rotated 180°. */
@@ -121,7 +126,25 @@ function CardBack({ unit }: { unit: number }) {
  * from `size`/`unit`. Renders a `<button>` when `onClick` is given (selectable card), else a plain box.
  */
 const PlayingCardBase = forwardRef<HTMLElement, PlayingCardProps>(function PlayingCard(
-  { code, faceDown, selected, highlighted, disabled, size = "md", unit, onClick, className, style, tabIndex, onKeyDown, onFocus },
+  {
+    code,
+    faceDown,
+    selected,
+    highlighted,
+    disabled,
+    size = "md",
+    unit,
+    onClick,
+    className,
+    style,
+    tabIndex,
+    onKeyDown,
+    onFocus,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel,
+  },
   ref,
 ) {
   const px = unit ?? CARD_UNIT[size];
@@ -132,7 +155,7 @@ const PlayingCardBase = forwardRef<HTMLElement, PlayingCardProps>(function Playi
 
   const rootClass = cn(
     "relative block shrink-0 rounded-[0.6em] no-select",
-    "[transform:translateY(var(--lift,0px))] transition-[transform,box-shadow] duration-200 [transition-timing-function:cubic-bezier(.22,1.25,.36,1)]",
+    "[transform:translateY(var(--lift,0px))_rotate(var(--tilt,0deg))_scale(var(--press,1))] transition-[transform,box-shadow] duration-200 [transition-timing-function:cubic-bezier(.22,1.25,.36,1)]",
     showBack
       ? cn("leery-card-back ring-1 ring-primary/45", tiny ? "shadow-[0_2px_5px_rgb(0_0_0/.55)]" : "shadow-[0_6px_14px_-4px_rgb(0_0_0/.75),0_0_14px_-4px_hsl(var(--primary)/.55)]")
       : cn(
@@ -142,6 +165,7 @@ const PlayingCardBase = forwardRef<HTMLElement, PlayingCardProps>(function Playi
     selected && "[--lift:-14px]",
     !selected && onClick && !disabled && "[@media(hover:hover)]:hover:[--lift:-6px]",
     onClick && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+    onClick && !disabled && "active:[--press:0.96]",
     className,
   );
 
@@ -169,6 +193,10 @@ const PlayingCardBase = forwardRef<HTMLElement, PlayingCardProps>(function Playi
         onClick={onClick}
         onKeyDown={onKeyDown}
         onFocus={onFocus}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         disabled={disabled}
         tabIndex={tabIndex}
         aria-pressed={selected ?? false}

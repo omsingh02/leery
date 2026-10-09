@@ -4,6 +4,7 @@
  *   npx vite --config dev/vite.harness.config.ts
  *   /dev/game.html?state=turn-mine      a static fixture (see FIXTURE_NAMES in src/dev/fixtures.ts)
  *   /dev/game.html?sim=1                a scripted game: play cards → bots react → reveal → their turn → …
+ *   /dev/game.html?deal=1               a brand-new game: watch the opening deal
  * Add `&reduced=1` to emulate prefers-reduced-motion.
  */
 import "@fontsource-variable/inter";
@@ -14,6 +15,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { MotionConfig } from "framer-motion";
 import { Toaster } from "sonner";
+import { FxProvider } from "@/components/fx/FxProvider";
 import { GameScreen } from "@/components/game/GameScreen";
 import { PlayingCard } from "@/components/game/PlayingCard";
 import { fakeController } from "@/dev/fakeController";
@@ -165,10 +167,12 @@ function SimApp({ reduced }: { reduced: boolean }) {
 
   return (
     <MotionConfig reducedMotion={reduced ? "always" : "user"}>
-      <MemoryRouter>
-        <GameScreen room={room} />
-      </MemoryRouter>
-      <Toaster theme="dark" />
+      <FxProvider>
+        <MemoryRouter>
+          <GameScreen room={room} />
+        </MemoryRouter>
+        <Toaster theme="dark" />
+      </FxProvider>
     </MotionConfig>
   );
 }
@@ -202,10 +206,23 @@ const requested = params.get("state") ?? "turn-mine";
 const name: FixtureName = (FIXTURE_NAMES as readonly string[]).includes(requested) ? (requested as FixtureName) : "turn-mine";
 const reduced = Boolean(params.get("reduced"));
 
+/** A game that has just started: nothing played yet, 13 cards each — the director deals them out. */
+function freshDeal(): RoomView {
+  const v = fixture("turn-mine") as RoomView;
+  const hand = sortCards(["AS", "3H", "3D", "5C", "7S", "7H", "9C", "10D", "JH", "JS", "QC", "KD", "KH"]);
+  return {
+    ...v,
+    pile: 0,
+    log: [{ n: 1, t: Date.now(), k: "start" }],
+    players: v.players.map((p) => ({ ...p, cards: 13 })),
+    me: { ...v.me, hand, canPlay: true },
+  };
+}
+
 function StaticApp() {
   const room = useMemo(
     () =>
-      fakeController(fixture(name), {
+      fakeController(params.get("deal") ? freshDeal() : fixture(name), {
         play: async (cards) => {
           console.info("[harness] play", cards);
           return true;
@@ -215,10 +232,12 @@ function StaticApp() {
   );
   return (
     <MotionConfig reducedMotion={reduced ? "always" : "user"}>
-      <MemoryRouter>
-        <GameScreen room={room} />
-      </MemoryRouter>
-      <Toaster theme="dark" />
+      <FxProvider>
+        <MemoryRouter>
+          <GameScreen room={room} />
+        </MemoryRouter>
+        <Toaster theme="dark" />
+      </FxProvider>
     </MotionConfig>
   );
 }

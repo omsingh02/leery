@@ -1,10 +1,12 @@
 import { useMemo, type CSSProperties, type ReactNode, type Ref } from "react";
-import { opponentsInOrder } from "@/lib/game";
-import type { PlayerView, RoomView } from "@/lib/types";
+import { opponentsInOrder, rankOf } from "@/lib/game";
+import type { PlayerView, Rank, RoomView } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { myNextTurn } from "./myNext";
 import { PhaseBanner } from "./PhaseBanner";
 import { Pile } from "./Pile";
-import { Seat, type SeatRole, type SeatVariant } from "./Seat";
+import { RankDial } from "./RankDial";
+import { Seat, type SeatReaction, type SeatRole, type SeatVariant } from "./Seat";
 import { arcPositions } from "./seatLayout";
 import { useMediaQuery } from "./useMediaQuery";
 import "./game.css";
@@ -16,6 +18,16 @@ interface TableProps {
   pileRef: Ref<HTMLDivElement>;
   /** Lets the screen find a seat's DOM node (for flying-card animations). */
   registerSeat: (id: string, el: HTMLElement | null) => void;
+  /** Bumps whenever cards land on the pile. */
+  pileImpact?: number;
+  /** A drag is hovering over the pile. */
+  dropActive?: boolean;
+  /** One-shot seat animations (just threw cards, just accepted). */
+  reactions?: Record<string, SeatReaction>;
+  /** A seat's hand count is counting up (for tick sounds). */
+  onCountStep?: (step: number, id: string) => void;
+  /** The opening deal: counts change quietly. */
+  quietCounts?: boolean;
   /** Rendered below the felt: my bar, hand and actions. */
   children?: ReactNode;
 }
@@ -25,6 +37,8 @@ interface SeatState {
   role: SeatRole;
   tag: string | null;
   accepted: boolean;
+  claim: { count: number; rank: Rank } | null;
+  challengeDeadline: number | null;
 }
 
 /** What each opponent is doing right now, derived from the current phase. */
@@ -33,9 +47,13 @@ function seatState(view: RoomView, p: PlayerView): SeatState {
   let role: SeatRole = null;
   let tag: string | null = null;
 
+  let claim: SeatState["claim"] = null;
+  let challengeDeadline: number | null = null;
   if (status === "challenge" && challenge?.by === p.id) {
     role = "accused";
     tag = `played ×${challenge.count}`;
+    claim = { count: challenge.count, rank: challenge.rank };
+    challengeDeadline = challenge.deadline;
   }
   if (status === "reveal" && reveal) {
     if (reveal.caller === p.id) {
@@ -55,6 +73,8 @@ function seatState(view: RoomView, p: PlayerView): SeatState {
     role,
     tag,
     accepted: status === "challenge" && !!challenge?.passed.includes(p.id),
+    claim,
+    challengeDeadline,
   };
 }
 
@@ -63,7 +83,7 @@ function seatState(view: RoomView, p: PlayerView): SeatState {
  * and (via `children`) my own bar, hand and actions underneath.
  * Phones: opponents wrap in a rail above the felt. ≥ lg: they sit on an arc around the felt.
  */
-export function Table({ view, serverNow, pileRef, registerSeat, children }: TableProps) {
+export function Table({ view, serverNow, pileRef, registerSeat, pileImpact = 0, dropActive = false, reactions, onCountStep, quietCounts, children }: TableProps) {
   const desktop = useMediaQuery("(min-width: 1024px)");
   const short = useMediaQuery("(max-height: 700px)");
   const opponents = useMemo(() => opponentsInOrder(view.players, view.me.id), [view.players, view.me.id]);
@@ -93,15 +113,30 @@ export function Table({ view, serverNow, pileRef, registerSeat, children }: Tabl
         role={st.role}
         accepted={st.accepted}
         tag={st.tag}
+        claim={st.claim}
+        challengeDeadline={st.challengeDeadline}
+        reaction={reactions?.[p.id] ?? null}
+        onCountStep={onCountStep}
+        quietCounts={quietCounts}
         style={style}
       />
     );
   };
 
+  // The dial: the claimed rank, where my own cards are, and what I'll be claiming next.
+  const dialRank = view.status === "turn" ? view.turn?.rank : view.status === "challenge" ? view.challenge?.rank : view.status === "reveal" ? view.reveal?.rank : undefined;
+  const mine = useMemo(() => {
+    const out: Partial<Record<Rank, number>> = {};
+    for (const c of view.me.hand) out[rankOf(c)] = (out[rankOf(c)] ?? 0) + 1;
+    return out;
+  }, [view.me.hand]);
+  const next = myNextTurn(view);
+
   const feltContent = (
     <>
+      {dialRank && !short && <RankDial rank={dialRank} mine={mine} mark={next && next.turnsAway > 0 ? next.rank : null} />}
       <PhaseBanner view={view} serverNow={serverNow} />
-      <Pile ref={pileRef} count={view.pile} unit={arcLayout ? 15 : short ? (desktop ? 10 : 8) : 13} />
+      <Pile ref={pileRef} count={view.pile} impact={pileImpact} dropActive={dropActive} unit={arcLayout ? 15 : short ? (desktop ? 10 : 8) : 13} />
     </>
   );
 
