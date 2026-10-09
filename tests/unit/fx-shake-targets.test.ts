@@ -43,4 +43,30 @@ describe("shake targets", () => {
     expect(a.style.transform).toBe(b.style.transform);
     expect(a.style.transform).toContain("translate3d(2px");
   });
+
+  it("keeps an element's own transform: shakes on top of it and goes back to it", () => {
+    const a = el();
+    a.style.transform = "scale(1.1)";
+    offs.push(registerShakeTarget(a));
+    frame("2px", "0px", "0deg");
+    expect(a.style.transform).toBe("scale(1.1) translate3d(2px, 0px, 0) rotate(0deg)");
+    frame("0px", "0px", "0deg");
+    expect(a.style.transform).toBe("scale(1.1)");
+    registerShakeTarget(a)(); // (a second, short-lived registration)
+    expect(a.style.transform).toBe("scale(1.1)");
+  });
+
+  it("an element two components asked for keeps shaking until both let go", () => {
+    const a = el();
+    const first = registerShakeTarget(a);
+    const second = registerShakeTarget(a);
+    first();
+    frame("4px", "0px", "0deg");
+    expect(a.style.transform).toContain("translate3d(4px");
+    first(); // releasing twice is harmless
+    frame("5px", "0px", "0deg");
+    expect(a.style.transform).toContain("translate3d(5px");
+    second();
+    expect(a.style.transform).toBe("");
+  });
 });

@@ -5,15 +5,30 @@ import type { ShakeTarget } from "./shake";
  * of them — never CSS custom properties on <html>, which would make the browser re-style the whole
  * document on every frame (it's the difference between a smooth shake and a stutter on a phone).
  */
-const targets = new Set<HTMLElement>();
+interface Target {
+  /** Registrations of this element (a component and its parent may both ask). */
+  count: number;
+  /** The element's own inline transform when it signed up: what it goes back to at rest. */
+  rest: string;
+}
+const targets = new Map<HTMLElement, Target>();
 
 /** Opt an element into the screen shake. Returns the function that opts it out again. */
 export function registerShakeTarget(el: HTMLElement | null | undefined): () => void {
   if (!el) return () => undefined;
-  targets.add(el);
+  const known = targets.get(el);
+  if (known) known.count += 1;
+  else targets.set(el, { count: 1, rest: el.style.transform });
+  let released = false;
   return () => {
+    if (released) return;
+    released = true;
+    const t = targets.get(el);
+    if (!t) return;
+    t.count -= 1;
+    if (t.count > 0) return; // someone else still wants it to shake
     targets.delete(el);
-    el.style.transform = "";
+    el.style.transform = t.rest;
   };
 }
 
@@ -24,8 +39,8 @@ let r = "0deg";
 const isRest = () => parseFloat(x) === 0 && parseFloat(y) === 0 && parseFloat(r) === 0;
 
 function apply() {
-  const t = isRest() ? "" : `translate3d(${x}, ${y}, 0) rotate(${r})`;
-  for (const el of targets) el.style.transform = t;
+  const shake = isRest() ? "" : `translate3d(${x}, ${y}, 0) rotate(${r})`;
+  for (const [el, t] of targets) el.style.transform = shake ? `${t.rest} ${shake}`.trim() : t.rest;
 }
 
 /** What the shake engine writes its offsets to: collects x, y, rotation, then moves the registered elements once. */

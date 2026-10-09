@@ -5,14 +5,13 @@
  *                           vignette once, near the app root
  *   useFx()                 the controller inside React components
  *   getFx()                 the same controller from plain modules (e.g. the feedback bus)
- *   useShakeTarget(ref)    makes an element move with `fx.shake()` (preferred: one transform per frame)
- *   shakeStyle              the CSS-variable alternative (re-styles the whole page every frame; avoid)
+ *   useShakeTarget(ref)     makes an element move with `fx.shake()` (one transform write per frame)
  *
  * Every FxController call is safe at any time and a no-op when effects are reduced (prefs.effects, or
  * the OS "reduce motion" setting while on "auto"). Coordinates are viewport pixels. Try everything at
  * /dev/fx.html (npm run dev:ui).
  */
-import { createContext, useContext, useEffect, type CSSProperties, type RefObject } from "react";
+import { createContext, useContext, useEffect, type RefObject } from "react";
 import type { FxController } from "../feel/contract";
 import type { FxDebug } from "./engine";
 import { registerShakeTarget } from "./shakeTargets";
@@ -41,15 +40,6 @@ export function useFx(): FxController {
 export function useShakeTarget(ref: RefObject<HTMLElement | null>): void {
   useEffect(() => registerShakeTarget(ref.current), [ref]);
 }
-
-/**
- * (Prefer `useShakeTarget`.) Opt an element into the screen shake: spread this into its `style`. The element then moves with
- * `fx.shake()` (via the --fx-sx/--fx-sy/--fx-sr variables on <html>) and sits still otherwise.
- * Don't put it on an ancestor of `position: fixed` elements you want to keep pinned to the viewport.
- */
-export const shakeStyle: CSSProperties = {
-  transform: "translate3d(var(--fx-sx, 0px), var(--fx-sy, 0px), 0) rotate(var(--fx-sr, 0deg))",
-};
 
 /* ------------------------------------------------------------------ global access for non-React code */
 

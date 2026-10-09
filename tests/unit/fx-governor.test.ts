@@ -62,6 +62,23 @@ describe("frame governor", () => {
     expect(g.quality.level).toBe(0);
   });
 
+  it("doesn't keep climbing back to a level that just failed (a device that is only smooth when it does less)", () => {
+    const g = new FrameGovernor();
+    let changes = 0;
+    // 30 ms a frame at full quality, a comfortable 16.7 ms at anything cheaper
+    for (let i = 0; i < 3600; i++) if (g.observe(g.quality.level === 0 ? 30 : 16.7)) changes++;
+    expect(changes).toBeLessThanOrEqual(10); // a minute of this used to be ~33 level changes
+  });
+
+  it("…but trusts a level again once it has held for a while", () => {
+    const g = new FrameGovernor();
+    // fail a climb or two, so the climb gets slower
+    for (let i = 0; i < 1500; i++) g.observe(g.quality.level === 0 ? 30 : 16.7);
+    // then the device recovers for real: smooth at every level, for a long time
+    for (let i = 0; i < 6000; i++) g.observe(16.7);
+    expect(g.quality.level).toBe(0);
+  });
+
   it("quality only ever gets cheaper as the level rises", () => {
     for (let i = 1; i < QUALITY.length; i++) {
       expect(QUALITY[i].dprCap).toBeLessThanOrEqual(QUALITY[i - 1].dprCap);

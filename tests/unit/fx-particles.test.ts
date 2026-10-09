@@ -412,3 +412,34 @@ describe("drawing", () => {
     expect(parseColor("hsl(24 95% 58%)").r).toBeGreaterThan(200);
   });
 });
+
+describe("hostile options", () => {
+  const NASTY = [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+  it("a burst with non-finite options falls back to its defaults — no NaN particles, nothing stuck in the pool", () => {
+    for (const bad of NASTY) {
+      for (const kind of KINDS) {
+        const s = make(4);
+        s.burst(kind, ORIGIN, { count: bad, power: bad, spread: bad, angle: bad, delay: bad });
+        s.step(0.016);
+        for (const p of s.snapshot()) {
+          for (const v of [p.x, p.y, p.vx, p.vy, p.size, p.age, p.life, p.alpha]) expect(Number.isFinite(v), `${kind} ${bad}`).toBe(true);
+        }
+        for (let i = 0; i < 400; i++) s.step(0.05); // everything ends within 20 s
+        expect(s.alive, `${kind} ${bad} never finishes`).toBe(0);
+        expect(s.active).toBe(false);
+      }
+    }
+  });
+
+  it("a ring with non-finite options still expires, so the render loop can stop", () => {
+    for (const bad of NASTY) {
+      const s = make(5);
+      s.ring(ORIGIN, { delay: bad, duration: bad, size: bad, width: bad });
+      expect(s.ringCount).toBe(1);
+      for (let i = 0; i < 400; i++) s.step(0.05);
+      expect(s.ringCount, `delay ${bad} leaves a ring forever`).toBe(0);
+      expect(s.active).toBe(false);
+    }
+  });
+});

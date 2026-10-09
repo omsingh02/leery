@@ -193,13 +193,32 @@ describe("frame governor", () => {
     }
     expect(h.engine.debug().quality.level).toBeGreaterThan(0);
     expect(h.canvas.width).toBe(400); // dropped to 1×
-    const before = h.ctx.clearRect.mock.calls.length;
     h.engine.particles.clear();
-    // fewer particles per burst from now on
+    // fewer particles per burst from now on (the repaint cadence has its own test below)
     h.engine.burst("confetti", PT, { count: 60 });
     h.frame((ts += 40));
     expect(h.engine.particles.snapshot().length).toBeLessThan(60);
-    expect(h.ctx.clearRect.mock.calls.length).toBeGreaterThanOrEqual(before);
+  });
+
+  it("at the lowest quality it repaints every other frame, and climbs back to the full canvas once the device recovers", () => {
+    const h = build();
+    let ts = 16;
+    const frame = (gap: number) => {
+      h.engine.burst("sparks", PT, { count: 1 }); // keep the loop alive
+      ts += gap;
+      h.frame(ts);
+    };
+    for (let i = 0; i < 400 && h.engine.debug().quality.level < 2; i++) frame(40);
+    expect(h.engine.debug().quality.level).toBe(2);
+
+    h.ctx.clearRect.mockClear();
+    for (let i = 0; i < 10; i++) frame(40);
+    expect(h.ctx.clearRect.mock.calls.length).toBeGreaterThanOrEqual(4);
+    expect(h.ctx.clearRect.mock.calls.length).toBeLessThanOrEqual(6); // ~half of ten
+
+    for (let i = 0; i < 800 && h.engine.debug().quality.level > 0; i++) frame(16);
+    expect(h.engine.debug().quality.level).toBe(0);
+    expect(h.canvas.width).toBe(600); // the 1.5× canvas is back
   });
 });
 

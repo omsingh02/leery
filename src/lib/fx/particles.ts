@@ -31,6 +31,16 @@ const K_SMOKE = 4;
 const K_GLINTS = 5;
 
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
+
+/** Options with every non-finite number (NaN, ±Infinity) dropped, so the defaults apply instead of poisoning the simulation. */
+function finiteOnly<T extends object>(opts: T): T {
+  const out: Record<string, unknown> = { ...(opts as Record<string, unknown>) };
+  for (const key of Object.keys(out)) {
+    const v = out[key];
+    if (typeof v === "number" && !Number.isFinite(v)) delete out[key];
+  }
+  return out as T;
+}
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const easeOutCubic = (t: number) => 1 - (1 - t) * (1 - t) * (1 - t);
 const smoothstep = (a: number, b: number, x: number) => {
@@ -364,9 +374,10 @@ export class ParticleSystem {
    * Emit a burst. Returns how many particles were emitted (or scheduled, when `delay` > 0) after
    * clamping to the per-burst cap and the recycle budget.
    */
-  burst(kind: BurstKind, at: Point, opts: BurstOptions = {}): number {
+  burst(kind: BurstKind, at: Point, options: BurstOptions = {}): number {
     const spec = KIND_SPECS[kind];
     if (!spec || !Number.isFinite(at.x) || !Number.isFinite(at.y)) return 0;
+    const opts = finiteOnly(options);
     const asked = Math.floor(opts.count ?? spec.count);
     const wanted = this.countScale === 1 || asked <= 0 ? asked : Math.max(1, Math.round(asked * this.countScale));
     const count = Math.max(0, Math.min(Number.isFinite(wanted) ? wanted : spec.count, spec.maxPerBurst));
@@ -381,8 +392,9 @@ export class ParticleSystem {
   }
 
   /** An expanding ring. Rings are recycled oldest-first beyond MAX_RINGS. */
-  ring(at: Point, opts: RingOptions = {}): void {
+  ring(at: Point, options: RingOptions = {}): void {
     if (!Number.isFinite(at.x) || !Number.isFinite(at.y)) return;
+    const opts = finiteOnly(options);
     const delay = Math.max(0, Math.min(10, opts.delay ?? 0));
     let slot = this.rings.findIndex((r) => !r.alive);
     if (slot < 0) {

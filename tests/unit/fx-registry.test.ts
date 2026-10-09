@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FxController } from "@/lib/feel/contract";
-import { getFx, getFxDebug, NO_FX, registerFx, shakeStyle } from "@/lib/fx";
+import { getFx, getFxDebug, NO_FX, registerFx } from "@/lib/fx";
 
 const fake = (): FxController => ({ shake: vi.fn(), flash: vi.fn(), burst: vi.fn(), ring: vi.fn(), vignette: vi.fn() });
 const debug = (alive: number) => () => ({ alive, rings: 0, pending: 0, max: 400, running: false, shaking: false, reduced: false, frames: 0, quality: { level: 0 as const, dprCap: 1.5, everyN: 1 as const, countScale: 1 } });
@@ -60,11 +60,5 @@ describe("global controller", () => {
     const un = registerFx(fake());
     expect(getFxDebug()).toBeNull();
     un();
-  });
-});
-
-describe("shakeStyle", () => {
-  it("moves an element by the shake variables and rests at zero without them", () => {
-    expect(shakeStyle.transform).toBe("translate3d(var(--fx-sx, 0px), var(--fx-sy, 0px), 0) rotate(var(--fx-sr, 0deg))");
   });
 });

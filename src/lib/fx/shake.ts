@@ -4,8 +4,9 @@
  * Every call adds trauma (0–1, clamped); the shake you see is trauma² × a smooth noise signal, so a
  * little trauma barely trembles and a lot really hits. Trauma decays linearly to zero by the latest
  * requested end time, so overlapping shakes extend rather than restart each other. The offsets are
- * published as CSS custom properties on the root element (--fx-sx, --fx-sy in px, --fx-sr in deg);
- * elements opt in with `shakeStyle` (see ./index.ts). The rAF loop runs only while there is trauma.
+ * handed to a target as --fx-sx, --fx-sy (px) and --fx-sr (deg) — by default custom properties on the
+ * root element; the app passes a writer that moves the registered elements instead (see
+ * ./shakeTargets.ts). The rAF loop runs only while there is trauma.
  */
 
 export interface ShakeTarget {

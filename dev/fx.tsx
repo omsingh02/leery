@@ -7,11 +7,11 @@
 import "@fontsource-variable/inter";
 import "@fontsource-variable/unbounded";
 import "@/index.css";
-import { StrictMode, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { FxProvider } from "@/components/fx/FxProvider";
 import type { BurstKind, BurstOptions, FxController } from "@/lib/feel/contract";
-import { getFxDebug, PALETTE, shakeStyle, useFx } from "@/lib/fx";
+import { getFxDebug, PALETTE, useFx, useShakeTarget } from "@/lib/fx";
 import { prefs, usePrefs, type EffectsPref } from "@/lib/prefs";
 
 type Kind = BurstKind | "ring";
@@ -263,7 +263,8 @@ function Lab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on load
   }, []);
 
-  const stageStyle: CSSProperties = { ...shakeStyle };
+  const stageRef = useRef<HTMLDivElement>(null);
+  useShakeTarget(stageRef);
   return (
     <>
       <div className="lab-hud" data-testid="lab-hud">
@@ -277,7 +278,7 @@ function Lab() {
         <span>effects <b>{stats.reduced ? "REDUCED" : "full"}</b></span>
       </div>
 
-      <div className="lab-stage" style={stageStyle} data-testid="lab-stage" onPointerDown={(e) => fire(e.clientX, e.clientY)}>
+      <div ref={stageRef} className="lab-stage" data-testid="lab-stage" onPointerDown={(e) => fire(e.clientX, e.clientY)}>
         <div className="lab-felt" />
         <div className="lab-demo" />
         <div className="lab-hint">tap the table to fire “{kind}”</div>

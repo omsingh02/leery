@@ -160,13 +160,40 @@ body::after {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
+/*
+ * Reduced effects: the OS setting, or the player's own (Settings → Screen effects). FxProvider mirrors the
+ * effective state onto <html data-effects>; the media query covers the first paint before it has, and an explicit
+ * "Full" in Settings overrides the OS here just as it does for the canvas effects.
+ */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  html:not([data-effects="full"]) *,
+  html:not([data-effects="full"]) *::before,
+  html:not([data-effects="full"]) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+html[data-effects="reduced"] *,
+html[data-effects="reduced"] *::before,
+html[data-effects="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+/* …except what would otherwise be left looking broken once its animation is cut to nothing: */
+html[data-effects="reduced"] :is(.animate-shine, .animate-sweat) {
+  display: none; /* decorative sweeps and droplets would freeze mid-way */
+}
+html[data-effects="reduced"] .animate-float-up {
+  animation: none !important; /* the "+N" chip stays readable until the game removes it */
+}
+html[data-effects="reduced"] .animate-spin {
+  animation-duration: 1s !important; /* a loading spinner that doesn't turn looks like a hang */
+  animation-iteration-count: infinite !important;
+}
+html[data-effects="reduced"] [data-fx="vignette"] {
+  transition-duration: 700ms !important; /* the engine keeps this one slow on purpose, so it can never pulse */
 }

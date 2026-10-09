@@ -28,6 +28,12 @@ export const SLOW_MS = 23;
 export const FAST_MS = 18.2;
 const SLOW_RUN = 10;
 const FAST_RUN = 120;
+/** A climb that is followed by a step back down within this many frames didn't hold (the cheaper level was what made it smooth). */
+const HOLD_FRAMES = 420;
+/** …and each such failure doubles the comfort needed before the next climb, up to this. */
+const MAX_FAST_RUN = FAST_RUN * 16;
+/** A level that has held this long is trusted again: the next climb needs only the normal comfort. */
+const FORGIVE_FRAMES = 1800;
 const COOLDOWN = 30;
 const SMOOTHING = 0.15;
 /** Gaps longer than this (tab switches, debugger pauses) are clamped so they can't drag the average on their own. */
@@ -39,6 +45,8 @@ export class FrameGovernor {
   private slow = 0;
   private fast = 0;
   private cooldown = 0;
+  private fastRun = FAST_RUN;
+  private sinceChange = Infinity;
 
   get quality(): Quality {
     return QUALITY[this._level];
@@ -52,6 +60,8 @@ export class FrameGovernor {
   observe(gapMs: number): boolean {
     const x = Math.min(MAX_GAP_MS, Math.max(1, gapMs));
     this.ema += (x - this.ema) * SMOOTHING;
+    this.sinceChange += 1;
+    if (this.sinceChange > FORGIVE_FRAMES) this.fastRun = FAST_RUN;
     if (this.cooldown > 0) {
       this.cooldown -= 1;
       return false;
@@ -67,8 +77,10 @@ export class FrameGovernor {
       this.fast = 0;
     }
     if (this.slow >= SLOW_RUN && this._level < 2) {
+      // Stepping back down soon after climbing means the climb was a mistake: wait longer before trying again.
+      if (this.sinceChange < HOLD_FRAMES) this.fastRun = Math.min(MAX_FAST_RUN, this.fastRun * 2);
       this._level = (this._level + 1) as 1 | 2;
-    } else if (this.fast >= FAST_RUN && this._level > 0) {
+    } else if (this.fast >= this.fastRun && this._level > 0) {
       this._level = (this._level - 1) as 0 | 1;
     } else {
       return false;
@@ -76,6 +88,7 @@ export class FrameGovernor {
     this.slow = 0;
     this.fast = 0;
     this.cooldown = COOLDOWN;
+    this.sinceChange = 0;
     return true;
   }
 }

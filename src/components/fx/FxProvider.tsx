@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { FxController } from "@/lib/feel/contract";
 import { createFxEngine, type FxEngine } from "@/lib/fx/engine";
 import { FxContext, registerFx, shakeWriter } from "@/lib/fx";
+import { useEffectsReduced } from "@/lib/prefs";
 
 /**
  * Mounts the visual-effects layer (particle canvas, flash, vignette) and provides the controller
@@ -11,8 +12,16 @@ import { FxContext, registerFx, shakeWriter } from "@/lib/fx";
  *
  * The controller handed out is stable for the provider's lifetime; calls made before the engine
  * has mounted (the very first render) are simply dropped.
+ *
+ * It also mirrors the effective "reduced effects" state (the player's setting, or the OS's while on Auto)
+ * onto `<html data-effects="reduced|full">`, which the stylesheet uses to quieten every CSS animation too.
  */
 export function FxProvider({ children }: { children?: ReactNode }) {
+  const reduced = useEffectsReduced();
+  useLayoutEffect(() => {
+    document.documentElement.dataset.effects = reduced ? "reduced" : "full";
+  }, [reduced]);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const flashRef = useRef<HTMLDivElement>(null);
   const vignetteRef = useRef<HTMLDivElement>(null);
@@ -47,7 +56,7 @@ export function FxProvider({ children }: { children?: ReactNode }) {
       style={{ position: "fixed", inset: 0, zIndex: 65, pointerEvents: "none", overflow: "hidden" }}
     >
       {/* tension vignette — hidden (and GPU-free) until a level > 0 is requested */}
-      <div ref={vignetteRef} style={{ position: "absolute", inset: 0, opacity: 0, visibility: "hidden" }} />
+      <div ref={vignetteRef} data-fx="vignette" style={{ position: "absolute", inset: 0, opacity: 0, visibility: "hidden" }} />
       {/* particles and rings — hidden while idle */}
       <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", visibility: "hidden" }} />
       {/* one-shot colour flashes (Web Animations) */}
