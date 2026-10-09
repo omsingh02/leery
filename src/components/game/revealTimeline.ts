@@ -46,7 +46,15 @@ export function revealTimeline(cards: number): RevealTimeline {
   return { claim, emerge, flips, drum: Math.max(emerge + 200, last - 420), flip: FLIP, verdict, pickup, land: pickup + 640, settle: pickup + 200 };
 }
 
-/** Joined mid-reveal? Compress the story so the verdict and pickup still land before the server moves on. */
-export function revealSkip(tl: RevealTimeline, remainingMs: number): number {
-  return Math.max(0, tl.land + 300 - Math.max(0, remainingMs));
+/** The shortest the story is ever squeezed to (a quarter of its length): below that it would just be a blur. */
+const MIN_SCALE = 0.25;
+
+/**
+ * Joined mid-reveal (a reload, a reconnect)? Squeeze the whole story into the time that is left, so the verdict
+ * and the pickup still land before the server moves on. Every beat keeps its place in the order — they just come
+ * closer together. 1 means "tell it at full length".
+ */
+export function revealScale(tl: RevealTimeline, remainingMs: number): number {
+  if (!Number.isFinite(remainingMs)) return 1;
+  return Math.min(1, Math.max(MIN_SCALE, remainingMs / (tl.land + 300)));
 }

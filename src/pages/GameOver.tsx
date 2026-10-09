@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import type { RoomController } from "@/hooks/useRoom";
 import { feel } from "@/lib/feel";
 import { COLOR } from "@/lib/feel/plan";
-import { useFx } from "@/lib/fx";
+import { useFx, useShakeTarget } from "@/lib/fx";
 import { playerById } from "@/lib/game";
 import { spring } from "@/lib/motion";
 import { useEffectsReduced } from "@/lib/prefs";
@@ -18,6 +18,24 @@ import { cn } from "@/lib/utils";
 import { useDocumentTitle } from "./helpers";
 
 const cardsLeft = (n: number) => (n === 0 ? "Cleared" : `${n} card${n === 1 ? "" : "s"} left`);
+
+type GraphemeSegmenter = new (locale?: string, options?: { granularity: "grapheme" }) => { segment(text: string): Iterable<{ segment: string }> };
+
+/** User-perceived characters: a flag, a family emoji or an accented letter is one unit, not several code points. */
+const graphemes = (text: string): string[] => {
+  const Segmenter = (Intl as unknown as { Segmenter?: GraphemeSegmenter }).Segmenter;
+  return Segmenter ? Array.from(new Segmenter(undefined, { granularity: "grapheme" }).segment(text), (s) => s.segment) : Array.from(text);
+};
+
+/** A long name has to fit the line: names run up to 16 characters in a very wide display face. */
+const headlineSize = (text: string): string => {
+  const longest = Math.max(...text.split(" ").map((w) => graphemes(w).length));
+  return longest > 12
+    ? "text-[1.5rem] max-[340px]:text-[1.2rem] sm:text-3xl"
+    : longest > 9
+      ? "text-[1.85rem] max-[340px]:text-[1.5rem] sm:text-4xl"
+      : "text-[2.4rem] max-[340px]:text-[2rem] sm:text-5xl";
+};
 
 /** The headline, one word at a time, each letter dropping in — readable as plain text by screen readers. */
 function Headline({ text, reduced, className }: { text: string; reduced: boolean; className?: string }) {
@@ -29,8 +47,10 @@ function Headline({ text, reduced, className }: { text: string; reduced: boolean
       {words.map((word, wi) => (
         <Fragment key={wi}>
           {wi > 0 ? " " : null}
-          <span aria-hidden className="inline-block whitespace-nowrap">
-            {Array.from(word).map((ch) => {
+          {/* Plain inline + no-wrap: a word stays in one piece, and — unlike an inline-block — never grows a second
+              line box that the headline's gradient (background-clip: text) would fail to cover. */}
+          <span aria-hidden className="whitespace-nowrap">
+            {graphemes(word).map((ch) => {
               const i = n++;
               return (
                 <motion.span
@@ -58,6 +78,8 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
   const [rematching, setRematching] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const crownRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  useShakeTarget(mainRef);
 
   const { players, me, winner: winnerId } = view;
   const winner = playerById(players, winnerId);
@@ -84,22 +106,33 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
   // The finale: sound, vibration, and (for a win) confetti cannons from the corners and a glint where the crown lands.
   const staged = useRef(false);
   useEffect(() => {
-    if (staged.current) return;
+    // The one-shot sound and bursts happen once per mount; the vignette and the timer are (re)applied on every run
+    // so the dev-only effect double-run (StrictMode) tears down and sets up cleanly.
+    const first = !staged.current;
     staged.current = true;
     const w = window.innerWidth;
     const h = window.innerHeight;
+    let glint: number | undefined;
     if (iWon) {
-      feel.emit({ type: "game.win", at: { x: w / 2, y: h * 0.26 } });
-      fx.burst("confetti", { x: -8, y: h + 8 }, { count: 46, power: 1, spread: 46, angle: -58, delay: 0.25 });
-      fx.burst("confetti", { x: w + 8, y: h + 8 }, { count: 46, power: 1, spread: 46, angle: -122, delay: 0.25 });
-      const crown = crownRef.current?.getBoundingClientRect();
-      if (crown) fx.burst("glints", { x: crown.left + crown.width / 2, y: crown.top + crown.height / 2 }, { count: 14, power: 0.5, spread: 360, color: [COLOR.gold, COLOR.ivory], delay: 0.75 });
+      if (first) {
+        feel.emit({ type: "game.win", at: { x: w / 2, y: h * 0.26 } });
+        fx.burst("confetti", { x: -8, y: h + 8 }, { count: 46, power: 1, spread: 46, angle: -58, delay: 0.25 });
+        fx.burst("confetti", { x: w + 8, y: h + 8 }, { count: 46, power: 1, spread: 46, angle: -122, delay: 0.25 });
+      }
+      // A glint where the crown lands — measured when it has landed (it starts well above the screen).
+      glint = window.setTimeout(() => {
+        const crown = crownRef.current?.getBoundingClientRect();
+        if (crown) fx.burst("glints", { x: crown.left + crown.width / 2, y: crown.top + crown.height / 2 }, { count: 14, power: 0.5, spread: 360, color: [COLOR.gold, COLOR.ivory] });
+      }, 1000);
     } else {
-      feel.emit({ type: "game.lose" });
+      if (first) feel.emit({ type: "game.lose" });
       fx.vignette(0.3, COLOR.violet);
     }
-    return () => fx.vignette(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- staged once
+    return () => {
+      window.clearTimeout(glint);
+      fx.vignette(0);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- staged once per mount
   }, []);
 
   async function rematch() {
@@ -124,8 +157,9 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
 
   return (
     <main
+      ref={mainRef}
       data-testid="game-over"
-      className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col items-center justify-center px-4 py-8 safe-pt safe-pb"
+      className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col items-center justify-center px-4 pb-[max(env(safe-area-inset-bottom),2rem)] pt-[max(env(safe-area-inset-top),2.5rem)]"
     >
       {/* spotlight from above: gold for a win, cool violet-grey for a loss */}
       <motion.div
@@ -143,8 +177,8 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
 
       <div className="relative z-20 w-full text-center">
         <div className="relative mx-auto grid h-32 w-32 place-items-center">
-          <div aria-hidden className={cn("absolute inset-2 rounded-full blur-2xl motion-safe:animate-pulse", iWon ? "bg-gold/35" : "bg-primary/25")} />
-          <div aria-hidden className={cn("absolute inset-0 rounded-full border motion-safe:animate-ring-pulse", iWon ? "border-gold/30" : "border-primary/30")} />
+          <div aria-hidden className={cn("absolute inset-2 rounded-full blur-2xl animate-pulse", iWon ? "bg-gold/35" : "bg-primary/25")} />
+          <div aria-hidden className={cn("absolute inset-0 rounded-full border animate-ring-pulse", iWon ? "border-gold/30" : "border-primary/30")} />
           <motion.div
             initial={reduced ? { opacity: 0 } : { y: -220, rotate: -18, scale: 0.7, opacity: 0 }}
             animate={reduced ? { opacity: 1 } : { y: 0, rotate: 0, scale: 1, opacity: 1 }}
@@ -152,17 +186,19 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
             className="relative"
           >
             {winner ? (
-              <Avatar name={winner.name} color={winner.color} bot={winner.bot} size={96} className={cn("ring-4", iWon ? "ring-gold/70" : "ring-white/25")}>
-                <motion.div
-                  ref={crownRef}
-                  initial={reduced ? { opacity: 0 } : { y: -42, opacity: 0, rotate: 14, scale: 1.3 }}
-                  animate={reduced ? { opacity: 1 } : { y: 0, opacity: 1, rotate: -6, scale: 1 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 12, delay: 0.62 }}
-                  className="absolute -top-7 left-1/2 -ml-[18px]"
-                >
-                  <Crown className="h-9 w-9 fill-gold text-gold drop-shadow-[0_0_12px_hsl(var(--gold))]" aria-hidden />
-                </motion.div>
-              </Avatar>
+              <div className={cn("rounded-full ring-4", iWon ? "ring-gold/70" : "ring-white/25")}>
+                <Avatar name={winner.name} color={winner.color} bot={winner.bot} size={96}>
+                  <motion.div
+                    ref={crownRef}
+                    initial={reduced ? { opacity: 0 } : { y: -42, opacity: 0, rotate: 14, scale: 1.3 }}
+                    animate={reduced ? { opacity: 1 } : { y: 0, opacity: 1, rotate: -6, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 12, delay: 0.62 }}
+                    className="absolute -top-7 left-1/2 -ml-[18px]"
+                  >
+                    <Crown className="h-9 w-9 fill-gold text-gold drop-shadow-[0_0_12px_hsl(var(--gold))]" aria-hidden />
+                  </motion.div>
+                </Avatar>
+              </div>
             ) : (
               <Trophy className="h-20 w-20 text-gold" aria-hidden />
             )}
@@ -177,7 +213,7 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
         >
           {iWon ? "Victory" : "Game over"}
         </motion.p>
-        <h1 data-testid="winner-name" className="mt-1.5 break-words font-display text-[2.4rem] font-black leading-[1.05] tracking-tight sm:text-5xl">
+        <h1 data-testid="winner-name" className={cn("mt-1.5 break-words font-display font-black leading-[1.05] tracking-tight", headlineSize(headline))}>
           <Headline
             text={headline}
             reduced={reduced}
@@ -240,7 +276,14 @@ export function GameOver({ room, view }: { room: RoomController; view: RoomView 
                   {p.left && <Badge>Left</Badge>}
                 </div>
                 <span className={cn("relative shrink-0 text-sm tabular-nums", isWinner ? "font-semibold text-gold" : "text-muted")}>
-                  {cardsLeft(p.cards)}
+                  {p.cards === 0 ? (
+                    "Cleared"
+                  ) : (
+                    <>
+                      {p.cards}
+                      <span className="max-[339px]:hidden"> card{p.cards === 1 ? "" : "s"}</span> left
+                    </>
+                  )}
                 </span>
               </motion.li>
             );

@@ -276,12 +276,17 @@ export const Hand = memo(function Hand({
   const onPointerDown = useCallback((e: PointerEvent<HTMLButtonElement>, code: CardCode) => {
     const s = latest.current;
     if (!s.drag?.enabled || !s.interactive || (e.pointerType === "mouse" && e.button !== 0)) return;
+    if (press.current) return; // one finger at a time: a second touch must neither hijack nor orphan the first drag
     press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, code, active: false, armed: false, set: [] };
   }, []);
 
   const onPointerMove = useCallback((e: PointerEvent<HTMLButtonElement>) => {
     const pr = press.current;
     if (!pr || pr.id !== e.pointerId) return;
+    if (e.pointerType === "mouse" && (e.buttons & 1) === 0) {
+      endDrag(false); // the button was let go somewhere we weren't told about
+      return;
+    }
     const s = latest.current;
     const dx = e.clientX - pr.x;
     const dy = e.clientY - pr.y;
@@ -322,7 +327,7 @@ export const Hand = memo(function Hand({
       s.drag?.onState?.(armed ? "armed" : "dragging");
       feel.emit({ type: armed ? "drag.arm" : "drag.disarm" });
     }
-  }, []);
+  }, [endDrag]);
 
   const onPointerEnd = useCallback(
     (e: PointerEvent<HTMLButtonElement>) => {
@@ -336,6 +341,25 @@ export const Hand = memo(function Hand({
     },
     [endDrag],
   );
+
+  // A press whose release we never heard about (let go off the card before the drag began, a tab switch, a system
+  // gesture) must not stay armed: the next hover would otherwise start a drag.
+  useEffect(() => {
+    const lost = (e: Event) => {
+      const pr = press.current;
+      if (!pr) return;
+      if (e.type !== "blur" && (e as globalThis.PointerEvent).pointerId !== pr.id) return;
+      endDrag(false);
+    };
+    window.addEventListener("pointerup", lost);
+    window.addEventListener("pointercancel", lost);
+    window.addEventListener("blur", lost);
+    return () => {
+      window.removeEventListener("pointerup", lost);
+      window.removeEventListener("pointercancel", lost);
+      window.removeEventListener("blur", lost);
+    };
+  }, [endDrag]);
 
   // The drag must not outlive its cards (e.g. the turn ends mid-drag).
   useEffect(() => {

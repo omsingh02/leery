@@ -51,7 +51,7 @@ export interface Spark {
   onDone?: () => void;
 }
 
-const MAX_CARDS = 6;
+const MAX_CARDS = 8; // a deal wave sends one card to each of up to eight seats
 const pick = (p: Point | Point[], i: number): Point => (Array.isArray(p) ? p[Math.min(i, p.length - 1)] : p);
 
 function FlyingCard({ flight, index, ghost = 0, onDone }: { flight: Flight; index: number; ghost?: number; onDone: () => void }) {

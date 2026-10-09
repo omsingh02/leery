@@ -8,7 +8,7 @@ import type { CardCode, RevealView, RoomView } from "@/lib/types";
 import { clamp } from "@/lib/utils";
 import type { RoomController } from "@/hooks/useRoom";
 import type { Flight, Point, Spark } from "../FlyLayer";
-import { revealSkip, revealTimeline } from "../revealTimeline";
+import { revealScale, revealTimeline } from "../revealTimeline";
 import type { SeatReaction } from "../Seat";
 import { detectEvents, incomingCards, justDealt, type GameEvent } from "./events";
 import { applyHolds, arrivalHolds, isEmpty, mergeHolds, NO_HOLDS, release, type Holds } from "./holds";
@@ -122,6 +122,8 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
   const roomRef = useRef(room);
   const lastOptimisticPlay = useRef(0);
   const lastOptimisticCall = useRef(0);
+  const lastOptimisticAccept = useRef(0);
+  const pileFailsafe = useRef<number | undefined>(undefined);
   const dealingRef = useRef(dealPlan !== null);
   useEffect(() => {
     latest.current = view;
@@ -139,6 +141,7 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
     () => () => {
       timers.current.forEach(clearTimeout);
       revealTimers.current.forEach(clearTimeout);
+      clearTimeout(pileFailsafe.current);
     },
     [],
   );
@@ -163,18 +166,26 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
   }, []);
 
   // ---- cards across the table ---------------------------------------------------------------------------------
-  /** Cards leave `from`, fly to the pile and land with a thud. The pile's count is held until they do. */
+  /**
+   * Cards leave `from`, fly to the pile and land with a thud. The pile's count is held until they do — unless the
+   * snapshot has already moved past the challenge (a missed update), where the reveal owns the pile. A `token`
+   * lets the caller call the landing off (the play was rejected, so there is nothing to land).
+   */
   const throwCards = useCallback(
-    (by: string, count: number, mine: boolean, pileBefore: number, rects?: Point[]) => {
+    (by: string, count: number, mine: boolean, pileBefore: number, rects?: Point[], opts: { hold?: boolean; token?: { cancelled: boolean } } = {}) => {
+      const hold = opts.hold !== false;
       const to = pointOf(refs.pile.current);
       const from = rects && rects.length ? rects : mine ? pointOf(refs.handWrap.current, true) : seatPoint(by);
       if (!to || !from) {
-        setHolds((h) => release(h, "pile"));
+        if (hold) setHolds((h) => release(h, "pile"));
         return;
       }
       const pan = mine ? 0 : panOf(Array.isArray(from) ? from[0] : from);
-      setHolds((h) => ({ ...h, pile: pileBefore }));
-      later(FLIGHT * 1000 + 1200, () => setHolds((h) => release(h, "pile"))); // failsafe if the landing never reports
+      if (hold) {
+        setHolds((h) => ({ ...h, pile: pileBefore }));
+        clearTimeout(pileFailsafe.current);
+        pileFailsafe.current = window.setTimeout(() => setHolds((h) => release(h, "pile")), FLIGHT * 1000 + 1200); // if the landing never reports
+      }
       feel.emit({ type: "cards.throw", n: count, mine, pan, dur: FLIGHT });
       if (!mine) react(by, "throw");
       launch({
@@ -184,14 +195,17 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
         unit: mine ? 9 : 6,
         trail: true,
         onLand: (_i, last) => {
-          if (!last) return;
-          setHolds((h) => release(h, "pile"));
+          if (!last || opts.token?.cancelled) return;
+          if (hold) {
+            clearTimeout(pileFailsafe.current);
+            setHolds((h) => release(h, "pile"));
+          }
           setPileImpact((n) => n + 1);
           feel.emit({ type: "cards.land", n: count, mine, at: to, pan });
         },
       });
     },
-    [later, launch, react, refs.handWrap, refs.pile, seatPoint],
+    [launch, react, refs.handWrap, refs.pile, seatPoint],
   );
 
   /** The pile (and the revealed cards) sweep to whoever has to take them. */
@@ -246,8 +260,8 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
       revealTimers.current = [];
       const n = rv.cards.length;
       const tl = revealTimeline(n);
-      const skip = revealSkip(tl, rv.until - roomRef.current.serverNow());
-      const at = (ms: number) => Math.max(0, ms - skip);
+      const scale = revealScale(tl, rv.until - roomRef.current.serverNow());
+      const at = (ms: number) => ms * scale;
       const prevHand = before && rv.picker === next.me.id ? before.me.hand : null;
       later(at(tl.emerge), () => setHolds((h) => (h.pile === undefined ? h : { ...h, pile: Math.max(0, rv.pickup - n) })), revealTimers);
       later(at(tl.pickup), () => pickup(rv, prevHand), revealTimers);
@@ -317,19 +331,25 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
   useEffect(() => {
     const before = prev.current;
     const next = view;
-    const r = detectEvents(before, next, logN.current);
+    const r = detectEvents(before, next, logN.current, { live: { maxAgeMs: 6000 } });
     logN.current = r.lastLogN;
     prev.current = next;
     if (!before) return; // first mount: nothing to react to
 
+    // A tab in the background doesn't animate (frames are paused) and would play it all back at once on return.
+    const hidden = typeof document !== "undefined" && document.hidden;
+
     const handle = (e: GameEvent) => {
       switch (e.kind) {
         case "play": {
+          if (hidden) break;
           if (e.mine && Date.now() - lastOptimisticPlay.current < 5000) break; // already staged when I tapped Play
-          throwCards(e.by, e.count, e.mine, Math.max(0, next.pile - e.count));
+          // (If this snapshot has moved on to the reveal, the pile is the reveal's business, not this throw's.)
+          throwCards(e.by, e.count, e.mine, Math.max(0, next.pile - e.count), undefined, { hold: next.status === "challenge" });
           break;
         }
         case "call": {
+          if (hidden) break;
           if (e.mine && Date.now() - lastOptimisticCall.current < 5000) break; // the impact already happened under my finger
           const at = seatPoint(e.caller);
           feel.emit({ type: "call", mine: false, at: at ?? undefined, pan: panOf(at) });
@@ -351,6 +371,7 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
           break;
         }
         case "accept": {
+          if (e.mine && Date.now() - lastOptimisticAccept.current < 5000) break; // already answered when I tapped Accept
           feel.emit(e.mine ? { type: "accept.mine" } : { type: "accept.other", pan: panOf(seatPoint(e.by)) });
           if (!e.mine) react(e.by, "accept");
           break;
@@ -452,11 +473,16 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
         .filter((p): p is Point => p !== null);
       setHiding(new Set(cards));
       lastOptimisticPlay.current = Date.now();
-      throwCards(v.me.id, cards.length, true, v.pile, rects);
+      const token = { cancelled: false };
+      throwCards(v.me.id, cards.length, true, v.pile, rects, { token });
       const ok = await roomRef.current.play(cards);
+      // Answered: whatever the server's hand holds now is truly in my hand — including cards that came straight back
+      // (I bluffed, got called and picked up the pile before this reply arrived) — so nothing stays hidden.
+      setHiding(EMPTY);
       if (!ok) {
+        token.cancelled = true; // nothing landed on the pile
         lastOptimisticPlay.current = 0;
-        setHiding(EMPTY);
+        clearTimeout(pileFailsafe.current);
         setHolds((h) => release(h, "pile"));
       }
       return ok;
@@ -474,8 +500,11 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
   }, []);
 
   const acceptPlay = useCallback(async () => {
+    lastOptimisticAccept.current = Date.now();
     feel.emit({ type: "accept.mine" });
-    return roomRef.current.pass();
+    const ok = await roomRef.current.pass();
+    if (!ok) lastOptimisticAccept.current = 0;
+    return ok;
   }, []);
 
   const onCountStep = useCallback(

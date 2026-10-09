@@ -97,9 +97,22 @@ test.describe("Leery game feel (real UI ↔ real engine)", () => {
     await expect(page.getByTestId("setting-effects-reduced")).toHaveAttribute("aria-checked", "true");
     // With effects reduced there is nothing to preview, and the button says so.
     await expect(page.getByRole("button", { name: /effects are reduced/i })).toBeDisabled();
+    // The setting reaches the whole page, not just the canvas: <html data-effects> quietens every CSS animation too.
+    await expect(page.locator("html")).toHaveAttribute("data-effects", "reduced");
+    await page.getByTestId("setting-effects-full").click();
+    await expect(page.locator("html")).toHaveAttribute("data-effects", "full");
+    await page.getByTestId("setting-effects-reduced").click();
+    await expect(page.locator("html")).toHaveAttribute("data-effects", "reduced");
+
+    // "Show again" confirms itself for this visit only.
+    await page.getByTestId("setting-reset-tips").click();
+    await expect(page.getByTestId("setting-reset-tips")).toHaveText("Done");
 
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("settings-dialog")).toBeHidden();
+    await page.getByTestId("open-settings").click();
+    await expect(page.getByTestId("setting-reset-tips")).toHaveText("Show again");
+    await page.keyboard.press("Escape");
 
     await page.reload();
     await page.getByTestId("open-settings").click();

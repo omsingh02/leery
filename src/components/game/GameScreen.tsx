@@ -199,10 +199,12 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
   /** Play: the cards leave the hand at once (the director flies them), the request follows. */
   const { playCards } = d;
   const play = useCallback(
-    (cards: CardCode[]) => {
+    async (cards: CardCode[]) => {
       if (cards.length === 0) return;
       setSelected([]);
-      void playCards(cards);
+      const ok = await playCards(cards);
+      // Rejected (not your turn any more, a network error): the cards are back in the hand, so put the picks back too.
+      if (!ok) setSelected((cur) => (cur.length ? cur : cards));
     },
     [playCards],
   );
@@ -252,7 +254,7 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
   const next = myNextTurn(shown);
   const latestLog = view.log.length ? view.log[view.log.length - 1] : null;
   const visibleHand = useMemo(() => (d.hiding.size ? shown.me.hand.filter((c) => !d.hiding.has(c)) : shown.me.hand), [shown.me.hand, d.hiding]);
-  const canDrag = view.status === "turn" && me.canPlay && view.turn?.player === me.id;
+  const canDrag = view.status === "turn" && me.canPlay && view.turn?.player === me.id && !room.busy;
   const claimRank = view.turn?.rank;
   const dragLabel = `${Math.max(1, selected.length)} as ${claimRank ? RANK_PLURAL[claimRank] : "the rank"}`;
   const pileFrom: Point | null = centerOf(pileRef.current);
@@ -263,7 +265,7 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
       label: dragLabel,
       onPlay: (cards: CardCode[]) => {
         dragTipDone();
-        play(cards);
+        void play(cards);
       },
       onState: setDragState,
     }),
@@ -354,7 +356,7 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
                 selected={selected}
                 onPlay={() => {
                   dragTip.done();
-                  play(selected);
+                  void play(selected);
                 }}
                 onSelectMany={setSelected}
                 limitHits={limitHits}

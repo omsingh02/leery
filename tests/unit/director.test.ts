@@ -29,6 +29,42 @@ describe("detectEvents", () => {
     expect(b.events).toContainEqual({ kind: "play", by: prev.me.id, count: 1, rank: "8", mine: true, n: 100 });
   });
 
+  describe("live play", () => {
+    const entries = (now: number, plays: number, callAge?: number): LogEntry[] => {
+      const out: LogEntry[] = [];
+      for (let i = 0; i < plays; i++) out.push({ n: 200 + i, t: now - 500 * (plays - i), k: "play", p: "p-mira", pn: "Mira", c: 1, r: "7" });
+      if (callAge !== undefined) out.push({ n: 300, t: now - callAge, k: "call", p: "p-vex", pn: "Vex", a: "p-mira", an: "Mira", b: true, x: 3, r: "7" });
+      return out;
+    };
+
+    it("tells a burst as its last beats: at most two plays and one call per snapshot", () => {
+      const prev = base();
+      const next: RoomView = { ...prev, log: [...prev.log, ...entries(prev.now, 6, 100)] };
+      const r = detectEvents(prev, next, prev.log[prev.log.length - 1].n, { live: { maxAgeMs: 6000 } });
+      expect(r.events.filter((e) => e.kind === "play").map((e) => (e.kind === "play" ? e.n : 0))).toEqual([204, 205]);
+      expect(r.events.filter((e) => e.kind === "call")).toHaveLength(1);
+      expect(r.lastLogN).toBe(300); // …but the position still moves past everything seen
+    });
+
+    it("what happened a while ago is history, not news (a phone coming back from the background)", () => {
+      const prev = base();
+      const next: RoomView = { ...prev, log: [...prev.log, ...entries(prev.now - 60_000, 3, 59_000)] };
+      const r = detectEvents(prev, next, prev.log[prev.log.length - 1].n, { live: { maxAgeMs: 6000 } });
+      expect(r.events.filter((e) => e.kind === "play" || e.kind === "call")).toEqual([]);
+      expect(r.lastLogN).toBe(300);
+      // without live mode the log is told as it is (the pure default)
+      const all = detectEvents(prev, next, prev.log[prev.log.length - 1].n);
+      expect(all.events.filter((e) => e.kind === "play")).toHaveLength(3);
+    });
+
+    it("state-driven beats are unaffected by how old the log is", () => {
+      const prev = base();
+      const ch = fixture("challenge-call") as RoomView;
+      const r = detectEvents(prev, { ...ch, log: [...ch.log, ...entries(ch.now - 90_000, 2)] }, 0, { live: { maxAgeMs: 6000 } });
+      expect(r.events.some((e) => e.kind === "challengeStart")).toBe(true);
+    });
+  });
+
   it("starts a challenge when the status flips, and tells who is accused", () => {
     const prev = base();
     const ch = fixture("challenge-call") as RoomView;
@@ -88,6 +124,18 @@ describe("justDealt", () => {
     const fresh: RoomView = { ...v, log: [{ n: 1, t: 1, k: "start" }] };
     expect(justDealt(fresh)).toBe(1);
     expect(justDealt(v)).toBeNull(); // the fixture has plays after the start
+  });
+
+  it("finds a rematch's start even when the previous game is still in the log", () => {
+    const v = base();
+    const log: LogEntry[] = [
+      { n: 1, t: 1, k: "start" },
+      { n: 2, t: 2, k: "play", p: "p-mira", pn: "Mira", c: 1, r: "A" },
+      { n: 3, t: 3, k: "call", p: "p-vex", pn: "Vex", a: "p-mira", an: "Mira", b: false, x: 2, r: "A" },
+      { n: 4, t: 4, k: "start" }, // the rematch
+    ];
+    expect(justDealt({ ...v, log })).toBe(4);
+    expect(justDealt({ ...v, log: [...log, { n: 5, t: 5, k: "play", p: "p-mira", pn: "Mira", c: 1, r: "A" }] })).toBeNull();
   });
 });
 

@@ -137,6 +137,7 @@ export const FIXTURE_NAMES = [
   "eight-players",
   "finished-win",
   "finished-lose",
+  "finished-long-name",
   "preview",
   "preview-started",
 ] as const;
@@ -245,6 +246,13 @@ export function fixture(name: FixtureName, now = Date.now()): RoomView | RoomPre
         pile: 4,
         players: FOUR({}, [0, 6, 9, 3]),
         me: { ...base(now).me, hand: [] },
+      });
+    case "finished-long-name": // the longest name allowed, in a very wide display face
+      return base(now, {
+        status: "finished",
+        winner: "p-vex",
+        pile: 4,
+        players: FOUR({}, [7, 6, 0, 3]).map((p) => (p.id === "p-vex" ? { ...p, name: "SuperMarioFan123" } : p)),
       });
     case "finished-lose":
       return base(now, {

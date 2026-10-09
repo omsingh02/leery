@@ -145,12 +145,26 @@ export function Table({ view, serverNow, pileRef, registerSeat, pileImpact = 0, 
   const turnSince = view.status === "turn" ? view.turn?.since : undefined;
   const turnDeadline = view.status === "turn" ? (view.turn?.deadline ?? null) : null;
 
+  // One stable ref callback per seat: an inline `ref={(el) => …}` is a new function every render and would
+  // make every (memoised) seat re-render whenever the table does.
+  const registerRef = useRef(registerSeat);
+  registerRef.current = registerSeat;
+  const seatRefs = useRef(new Map<string, (el: HTMLElement | null) => void>());
+  const seatRef = (id: string) => {
+    let fn = seatRefs.current.get(id);
+    if (!fn) {
+      fn = (el) => registerRef.current(id, el);
+      seatRefs.current.set(id, fn);
+    }
+    return fn;
+  };
+
   const renderSeat = (p: PlayerView, style?: CSSProperties) => {
     const st = seatState(view, p);
     return (
       <Seat
         key={p.id}
-        ref={(el) => registerSeat(p.id, el)}
+        ref={seatRef(p.id)}
         player={p}
         serverNow={serverNow}
         variant={variant}

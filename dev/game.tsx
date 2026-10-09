@@ -5,7 +5,8 @@
  *   /dev/game.html?state=turn-mine      a static fixture (see FIXTURE_NAMES in src/dev/fixtures.ts)
  *   /dev/game.html?sim=1                a scripted game: play cards → bots react → reveal → their turn → …
  *   /dev/game.html?deal=1               a brand-new game: watch the opening deal
- * Add `&reduced=1` to emulate prefers-reduced-motion.
+ * Add `&reduced=1` (or `&reduced=0`) to switch the "Screen effects" setting to Reduced (or Full) — it is the real setting,
+ * so it is remembered by this browser like any other.
  */
 import "@fontsource-variable/inter";
 import "@fontsource-variable/unbounded";
@@ -21,6 +22,7 @@ import { PlayingCard } from "@/components/game/PlayingCard";
 import { fakeController } from "@/dev/fakeController";
 import { FIXTURE_NAMES, fixture, type FixtureName } from "@/dev/fixtures";
 import { nextRank, rankOf, sortCards } from "@/lib/game";
+import { prefs } from "@/lib/prefs";
 import { RANKS, SUITS, type CardCode, type LogEntry, type Rank, type RoomView } from "@/lib/types";
 
 const params = new URLSearchParams(window.location.search);
@@ -204,7 +206,9 @@ function GalleryApp() {
 
 const requested = params.get("state") ?? "turn-mine";
 const name: FixtureName = (FIXTURE_NAMES as readonly string[]).includes(requested) ? (requested as FixtureName) : "turn-mine";
-const reduced = Boolean(params.get("reduced"));
+const reducedParam = params.get("reduced");
+if (reducedParam !== null) prefs.set({ effects: reducedParam === "1" ? "reduced" : "full" });
+const reduced = reducedParam === "1";
 
 /** A game that has just started: nothing played yet, 13 cards each — the director deals them out. */
 function freshDeal(): RoomView {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { revealSkip, revealTimeline } from "@/components/game/revealTimeline";
+import { revealScale, revealTimeline } from "@/components/game/revealTimeline";
 
 /** The server holds the reveal for 4.5 s (see game.resolve_call). */
 const SERVER_HOLD = 4500;
@@ -31,11 +31,28 @@ describe("revealTimeline", () => {
     }
   });
 
-  it("someone who joins mid-reveal gets a compressed story, never a negative one", () => {
-    const tl = revealTimeline(2);
-    expect(revealSkip(tl, 4500)).toBe(0);
-    expect(revealSkip(tl, 1200)).toBeGreaterThan(0);
-    expect(revealSkip(tl, -500)).toBeGreaterThan(0);
-    expect(tl.land - revealSkip(tl, 1200)).toBeLessThanOrEqual(1200);
+  it("someone who joins mid-reveal gets the whole story squeezed into the time left, in the same order", () => {
+    for (const n of [1, 2, 3, 4]) {
+      const tl = revealTimeline(n);
+      expect(revealScale(tl, SERVER_HOLD)).toBeGreaterThan(0.98); // a full reveal is told (all but) at full length
+      expect(revealScale(tl, tl.land + 300)).toBe(1);
+      for (const remaining of [0.8, 0.5, 0.3].map((f) => Math.round(f * (tl.land + 300)))) {
+        const k = revealScale(tl, remaining);
+        expect(k).toBeGreaterThan(0);
+        expect(k).toBeLessThan(1);
+        // every beat is still in order, and the pickup lands before the server moves on
+        const beats = [tl.claim, tl.emerge, ...tl.flips, tl.verdict, tl.pickup, tl.land].map((ms) => ms * k);
+        expect([...beats].sort((a, b) => a - b)).toEqual(beats);
+        expect(tl.land * k).toBeLessThanOrEqual(remaining);
+      }
+    }
+  });
+
+  it("never squeezes to nothing or to nonsense", () => {
+    const tl = revealTimeline(3);
+    expect(revealScale(tl, 0)).toBe(0.25);
+    expect(revealScale(tl, -500)).toBe(0.25);
+    expect(revealScale(tl, Number.NaN)).toBe(1);
+    expect(revealScale(tl, Number.POSITIVE_INFINITY)).toBe(1);
   });
 });

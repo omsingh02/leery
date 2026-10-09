@@ -17,6 +17,7 @@ import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog";
 import type { RoomController } from "@/hooks/useRoom";
 import { BOT_STYLES, SPEEDS } from "@/lib/game";
 import { feel } from "@/lib/feel";
+import { useShakeTarget } from "@/lib/fx";
 import { MAX_PLAYERS, MIN_PLAYERS, type PlayerView, type RoomView, type Speed } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { copyText, inviteLink, useDocumentTitle } from "./helpers";
@@ -39,6 +40,8 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
   const [leaving, setLeaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const copiedTimer = useRef<number | undefined>(undefined);
+  const mainRef = useRef<HTMLElement>(null);
+  useShakeTarget(mainRef); // so the effects preview in Settings can shake something
   const returnFocus = useReturnFocus();
 
   useDocumentTitle(`Lobby · ${code}`);
@@ -112,7 +115,7 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
       : `You can hop back in with the code ${code} while the lobby is open.`;
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 safe-pt safe-pb max-lg:pb-40 sm:px-8" data-testid="lobby">
+    <main ref={mainRef} className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 safe-pt safe-pb max-lg:pb-40 sm:px-8" data-testid="lobby">
       <header className="flex items-center justify-between py-3">
         <Logo size="sm" />
         <div className="flex items-center gap-1">

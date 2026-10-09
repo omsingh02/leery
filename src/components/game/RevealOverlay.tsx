@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import type { Point } from "./FlyLayer";
 import { PlayingCard } from "./PlayingCard";
 import { RankChip } from "./RankChip";
-import { revealSkip, revealTimeline } from "./revealTimeline";
+import { revealScale, revealTimeline } from "./revealTimeline";
 import { useMediaQuery } from "./useMediaQuery";
 import "./game.css";
 
@@ -141,13 +141,21 @@ function Body({ reveal, players, serverNow, pileFrom }: { reveal: RevealView; pl
   const unit = desktop ? (count <= 3 ? 20 : 18) : count <= 2 ? 16 : count === 3 ? 15 : 13;
   const tl = useMemo(() => revealTimeline(count), [count]);
 
-  // Joined mid-reveal? Compress the choreography so the verdict still lands before the server moves on.
-  const [skip] = useState(() => revealSkip(tl, reveal.until - serverNow()));
-  const at = (ms: number) => Math.max(0, ms - skip);
+  // Joined mid-reveal? Squeeze the choreography so the verdict still lands before the server moves on.
+  const [scale] = useState(() => revealScale(tl, reveal.until - serverNow()));
+  const at = (ms: number) => ms * scale;
 
   const [stage, setStage] = useState(0); // 0 header · 1 claim · 2 cards · 3 verdict · 4 pickup · 5 aftermath
   const stampRef = useRef<HTMLDivElement>(null);
   const [scrimOut, setScrimOut] = useState(false);
+
+  // The verdict lands with the stamp: fire it once the stamp is on screen, so the ring and sparks know where it is.
+  const verdictFired = useRef(false);
+  useLayoutEffect(() => {
+    if (stage < 3 || verdictFired.current) return;
+    verdictFired.current = true;
+    feel.emit({ type: "reveal.verdict", bluff: reveal.bluff, at: centerOf(stampRef.current) });
+  }, [stage, reveal.bluff]);
 
   useEffect(() => {
     const last = tl.flips[tl.flips.length - 1];
@@ -155,10 +163,7 @@ function Body({ reveal, players, serverNow, pileFrom }: { reveal: RevealView; pl
       setTimeout(() => setStage((s) => Math.max(s, 1)), at(tl.claim)),
       setTimeout(() => setStage((s) => Math.max(s, 2)), at(tl.emerge)),
       setTimeout(() => feel.emit({ type: "reveal.drumroll", dur: Math.max(0.25, (at(last) - at(tl.drum)) / 1000) }), at(tl.drum)),
-      setTimeout(() => {
-        setStage((s) => Math.max(s, 3));
-        feel.emit({ type: "reveal.verdict", bluff: reveal.bluff, at: centerOf(stampRef.current) });
-      }, at(tl.verdict)),
+      setTimeout(() => setStage((s) => Math.max(s, 3)), at(tl.verdict)),
       setTimeout(() => setStage((s) => Math.max(s, 4)), at(tl.pickup)),
       setTimeout(() => setStage((s) => Math.max(s, 5)), at(tl.pickup + 380)),
       setTimeout(() => setScrimOut(true), at(tl.settle)),
