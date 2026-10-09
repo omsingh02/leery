@@ -2,10 +2,10 @@ import type { HapticName, HapticOptions } from "./feel/contract";
 import { prefs } from "./prefs";
 
 /**
- * Haptic feedback. Android (and desktop Chrome with a gamepad-less shrug) gets `navigator.vibrate`
- * patterns; iOS Safari 17.4+ has no Vibration API, so tap-like events borrow the light tick that a
- * toggling <input type="checkbox" switch> produces. Everything is gated by the player's preferences and
- * kept short: haptics should punctuate the picture and sound, never nag.
+ * Haptic feedback. Android gets `navigator.vibrate` patterns; iOS Safari has no Vibration API, so
+ * tap-like events borrow the light tick that toggling an <input type="checkbox" switch> produces
+ * (iOS 17.4+). Everything is gated by the player's preferences and kept short: haptics should
+ * punctuate the picture and sound, never nag.
  */
 
 /** A vibration pattern: [on, off, on, off, …] in milliseconds (the Vibration API's own shape). */
