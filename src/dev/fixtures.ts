@@ -128,6 +128,7 @@ export const FIXTURE_NAMES = [
   "turn-theirs",
   "turn-bot",
   "turn-auto",
+  "turn-last-card",
   "challenge-call",
   "challenge-passed",
   "challenge-accused",
@@ -193,6 +194,9 @@ export function fixture(name: FixtureName, now = Date.now()): RoomView | RoomPre
       return base(now, { turn: turnOf("p-mira", now), due: now + 31000 });
     case "turn-bot":
       return base(now, { turn: turnOf("p-vex", now, false), due: now + 1400 });
+    case "turn-last-card":
+      // somebody is down to one card, somebody to two: the table should feel the pressure
+      return base(now, { turn: turnOf("p-mira", now), due: now + 31000, players: FOUR({}, [12, 13, 1, 2]) });
     case "turn-auto":
       return base(now, {
         turn: turnOf(ME, now, false),
