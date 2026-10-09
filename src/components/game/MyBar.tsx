@@ -18,7 +18,7 @@ export const MyBar = memo(function MyBar({ view, avatarRef }: { view: RoomView; 
         <Avatar name={mine?.name ?? "You"} color={mine?.color ?? 0} bot={false} size={28} />
         {myTurn && <span aria-hidden className="absolute inset-0 rounded-full border-2 border-gold/70 animate-ring-pulse" />}
       </div>
-      <span className={cn("max-w-[7rem] truncate text-sm font-semibold", myTurn ? "text-gold" : "text-foreground")}>{mine?.name ?? "You"}</span>
+      <span className={cn("max-w-[7rem] shrink-0 truncate text-sm font-semibold", myTurn ? "text-gold" : "text-foreground")}>{mine?.name ?? "You"}</span>
       {mine?.host && <Crown className="h-3.5 w-3.5 shrink-0 text-gold" aria-label="Host" />}
       {next && next.turnsAway > 0 && (
         <span
@@ -26,7 +26,8 @@ export const MyBar = memo(function MyBar({ view, avatarRef }: { view: RoomView; 
           className="min-w-0 truncate rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] text-muted"
           title="The rank you'll have to claim on your next turn — those cards are marked in your hand."
         >
-          Next: <b className="text-foreground">{RANK_PLURAL[next.rank]}</b> · {next.turnsAway === 1 ? "you're up next" : `in ${next.turnsAway} turns`}
+          Next: <b className="text-foreground">{RANK_PLURAL[next.rank]}</b>
+          <span className="max-[359px]:hidden"> · {next.turnsAway === 1 ? "you're up next" : `in ${next.turnsAway} turns`}</span>
         </span>
       )}
       <span data-testid="my-card-count" className="ml-auto shrink-0 text-xs font-medium tabular-nums text-muted">

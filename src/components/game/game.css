@@ -84,3 +84,16 @@
 .hand-drag-return {
   transition: transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
+
+/* The felt drops things in a fixed order when its content doesn't fit (Table.tsx sets data-fit, 0 = everything):
+   1 the sub-line under the banner · 2 a smaller pile (in JS) · 3 the rank dial · 4 the smallest pile (in JS) ·
+   5 the small label above the banner and the prompt under it. */
+.felt:is([data-fit="1"], [data-fit="2"], [data-fit="3"], [data-fit="4"], [data-fit="5"]) .fit-sub {
+  display: none;
+}
+.felt:is([data-fit="3"], [data-fit="4"], [data-fit="5"]) .fit-dial {
+  display: none;
+}
+.felt[data-fit="5"] :is(.fit-over, .fit-prompt) {
+  display: none;
+}

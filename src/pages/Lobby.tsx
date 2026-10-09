@@ -116,7 +116,7 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
       <header className="flex items-center justify-between py-3">
         <Logo size="sm" />
         <div className="flex items-center gap-1">
-          <RulesButton />
+          <RulesButton compact />
           <SoundToggle />
           <SettingsButton />
         </div>

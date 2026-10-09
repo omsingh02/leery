@@ -27,7 +27,7 @@ function Clock({ deadline, serverNow }: { deadline: number; serverNow: () => num
 const Overline = ({ children, tone = "muted" }: { children: ReactNode; tone?: "gold" | "bluff" | "muted" }) => (
   <span
     className={cn(
-      "text-[11px] font-bold uppercase tracking-[0.22em]",
+      "fit-over text-[11px] font-bold uppercase tracking-[0.22em]",
       tone === "gold" && "text-gold",
       tone === "bluff" && "text-bluff",
       tone === "muted" && "text-muted",
@@ -44,7 +44,7 @@ const Title = ({ children }: { children: ReactNode }) => (
 );
 
 const Sub = ({ children, className }: { children: ReactNode; className?: string }) => (
-  <p className={cn("text-xs text-muted sm:text-sm [@media(max-height:700px)]:hidden", className)}>{children}</p>
+  <p className={cn("fit-sub text-xs text-muted sm:text-sm [@media(max-height:700px)]:hidden", className)}>{children}</p>
 );
 
 /**
@@ -141,7 +141,7 @@ export const PhaseBanner = memo(function PhaseBanner({ view, serverNow }: { view
           <RankChip rank={challenge.rank} size="sm" />
           <b className="text-gold">{RANK_PLURAL[challenge.rank]}</b>
         </p>
-        <p className="text-sm font-semibold text-foreground">{prompt}</p>
+        <p className="fit-prompt text-sm font-semibold text-foreground">{prompt}</p>
       </>
     );
   } else if (status === "reveal") {

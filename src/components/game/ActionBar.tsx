@@ -174,15 +174,17 @@ export const ActionBar = memo(function ActionBar({ room, view, selected, onPlay,
       <div className="flex flex-col gap-3">
         <WindowTimer since={challenge.since} deadline={challenge.deadline} serverNow={room.serverNow} />
         {canAct ? (
-          <div className="flex gap-3">
-            <div className="relative flex-[1.5]">
+          // A 3:2 grid, not flex: flex-grow would split only the space left *after* each button's padding, which
+          // flattens the ratio (and let Accept spill off the screen on a 360px phone). Tighter padding on narrow screens.
+          <div className="grid grid-cols-[3fr_2fr] gap-3">
+            <div className="relative">
               {/* the pulsing glow lives on its own layer (opacity/scale only), so it costs no repaint */}
               <span aria-hidden className="pointer-events-none absolute -inset-1 rounded-full bg-bluff/55 blur-lg animate-glow-breathe" />
               <Button
                 variant="bluff"
                 size={compact ? "lg" : "xl"}
                 data-testid="call-bluff"
-                className="relative w-full overflow-hidden"
+                className="relative w-full overflow-hidden px-4 min-[380px]:px-7"
                 disabled={!me.canCall}
                 loading={busy}
                 onClick={() => void onCall()}
@@ -198,7 +200,7 @@ export const ActionBar = memo(function ActionBar({ room, view, selected, onPlay,
               variant="trust"
               size={compact ? "lg" : "xl"}
               data-testid="accept-play"
-              className="flex-1"
+              className="w-full px-4 min-[380px]:px-7"
               disabled={!me.canPass || busy}
               onClick={() => void onAccept()}
             >
