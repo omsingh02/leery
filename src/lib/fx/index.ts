@@ -5,18 +5,21 @@
  *                           vignette once, near the app root
  *   useFx()                 the controller inside React components
  *   getFx()                 the same controller from plain modules (e.g. the feedback bus)
- *   shakeStyle              spread into the `style` of the element that should shake
+ *   useShakeTarget(ref)    makes an element move with `fx.shake()` (preferred: one transform per frame)
+ *   shakeStyle              the CSS-variable alternative (re-styles the whole page every frame; avoid)
  *
  * Every FxController call is safe at any time and a no-op when effects are reduced (prefs.effects, or
  * the OS "reduce motion" setting while on "auto"). Coordinates are viewport pixels. Try everything at
  * /dev/fx.html (npm run dev:ui).
  */
-import { createContext, useContext, type CSSProperties } from "react";
+import { createContext, useContext, useEffect, type CSSProperties, type RefObject } from "react";
 import type { FxController } from "../feel/contract";
 import type { FxDebug } from "./engine";
+import { registerShakeTarget } from "./shakeTargets";
 
 export type { FxDebug };
 export { PALETTE } from "./color";
+export { registerShakeTarget, shakeWriter } from "./shakeTargets";
 
 /** A controller that does nothing — used until/unless an <FxProvider> is mounted (tests, harnesses). */
 export const NO_FX: FxController = {
@@ -34,8 +37,13 @@ export function useFx(): FxController {
   return useContext(FxContext);
 }
 
+/** Make the element behind `ref` shake with `fx.shake()`. It needs no styling of its own. */
+export function useShakeTarget(ref: RefObject<HTMLElement | null>): void {
+  useEffect(() => registerShakeTarget(ref.current), [ref]);
+}
+
 /**
- * Opt an element into the screen shake: spread this into its `style`. The element then moves with
+ * (Prefer `useShakeTarget`.) Opt an element into the screen shake: spread this into its `style`. The element then moves with
  * `fx.shake()` (via the --fx-sx/--fx-sy/--fx-sr variables on <html>) and sits still otherwise.
  * Don't put it on an ancestor of `position: fixed` elements you want to keep pinned to the viewport.
  */

@@ -31,13 +31,20 @@ function load(): Prefs {
 let state: Prefs = load();
 const listeners = new Set<() => void>();
 
-const systemReduced = (): boolean => {
-  try {
-    return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  } catch {
-    return false;
+let mql: MediaQueryList | null | undefined;
+/** The OS "reduce motion" query, created once (components ask on every render). */
+const reducedQuery = (): MediaQueryList | null => {
+  if (mql === undefined) {
+    try {
+      mql = typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+    } catch {
+      mql = null;
+    }
   }
+  return mql;
 };
+
+const systemReduced = (): boolean => reducedQuery()?.matches ?? false;
 
 export const prefs = {
   get: (): Prefs => state,
@@ -68,16 +75,11 @@ export function useEffectsReduced(): boolean {
   return useSyncExternalStore(
     (cb) => {
       const off = prefs.subscribe(cb);
-      let mq: MediaQueryList | null = null;
-      try {
-        mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-        mq.addEventListener("change", cb);
-      } catch {
-        /* no matchMedia */
-      }
+      const mq = reducedQuery();
+      mq?.addEventListener?.("change", cb);
       return () => {
         off();
-        mq?.removeEventListener("change", cb);
+        mq?.removeEventListener?.("change", cb);
       };
     },
     prefs.effectsReduced,

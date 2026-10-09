@@ -41,10 +41,6 @@ export default {
       },
       keyframes: {
         float: { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-6px)" } },
-        "pulse-glow": {
-          "0%,100%": { boxShadow: "0 0 0 1px hsl(var(--bluff) / .6), 0 8px 30px -6px hsl(var(--bluff) / .55)" },
-          "50%": { boxShadow: "0 0 0 2px hsl(var(--bluff) / .9), 0 8px 46px -2px hsl(var(--bluff) / .95)" },
-        },
         shimmer: { "100%": { transform: "translateX(100%)" } },
         shake: {
           "0%,100%": { transform: "translateX(0)" },
@@ -55,9 +51,15 @@ export default {
         },
         "pop-in": { "0%": { opacity: "0", transform: "scale(.85)" }, "100%": { opacity: "1", transform: "scale(1)" } },
         "spin-slow": { to: { transform: "rotate(360deg)" } },
+        /* A ring that swells and fades: transform + opacity only, so it never repaints. */
         "ring-pulse": {
-          "0%": { boxShadow: "0 0 0 0 hsl(var(--gold) / .55)" },
-          "100%": { boxShadow: "0 0 0 14px hsl(var(--gold) / 0)" },
+          "0%": { transform: "scale(1)", opacity: ".75" },
+          "100%": { transform: "scale(1.75)", opacity: "0" },
+        },
+        /* A soft glow that breathes behind a button (opacity + scale only). */
+        "glow-breathe": {
+          "0%,100%": { opacity: ".45", transform: "scale(1)" },
+          "50%": { opacity: ".95", transform: "scale(1.07)" },
         },
         /* game feel */
         tremble: {
@@ -66,10 +68,6 @@ export default {
           "75%": { transform: "translateX(1.2px)" },
         },
         bob: { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-2.5px)" } },
-        "danger-pulse": {
-          "0%": { boxShadow: "0 0 0 0 hsl(var(--bluff) / .65)" },
-          "100%": { boxShadow: "0 0 0 10px hsl(var(--bluff) / 0)" },
-        },
         sweat: {
           "0%": { transform: "translateY(-2px) scale(.6)", opacity: "0" },
           "25%": { opacity: "1" },
@@ -97,15 +95,14 @@ export default {
       },
       animation: {
         float: "float 5s ease-in-out infinite",
-        "pulse-glow": "pulse-glow 1.1s ease-in-out infinite",
         shimmer: "shimmer 1.8s infinite",
         shake: "shake .5s ease-in-out",
         "pop-in": "pop-in .28s cubic-bezier(.2,1.3,.4,1) both",
         "spin-slow": "spin-slow 24s linear infinite",
         "ring-pulse": "ring-pulse 1.4s ease-out infinite",
+        "glow-breathe": "glow-breathe 1.2s ease-in-out infinite",
         tremble: "tremble .09s linear infinite",
         bob: "bob 1.5s ease-in-out infinite",
-        "danger-pulse": "danger-pulse 1.1s ease-out infinite",
         sweat: "sweat 1.15s ease-in infinite",
         "ping-once": "ping-once .7s ease-out both",
         arrive: "arrive .5s cubic-bezier(.2,.9,.3,1.12) both",

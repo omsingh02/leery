@@ -402,19 +402,33 @@ export function useDirector({ room, view, refs }: { room: RoomController; view: 
     const total = Math.max(1000, tensionDeadline - tensionSince);
     const beating = accused || deciding;
     let lastSec = -1;
+    let lastVig = -1;
+    let lastBpm = -1;
+    let lastLevel = -1;
+    const setVignette = (level: number, color: string) => {
+      if (Math.abs(level - lastVig) < 0.012) return; // nobody can see a smaller change
+      lastVig = level;
+      fx.vignette(level, color);
+    };
+    const setHeartbeat = (bpm: number, level: number) => {
+      if (Math.abs(bpm - lastBpm) < 1 && Math.abs(level - lastLevel) < 0.02) return;
+      lastBpm = bpm;
+      lastLevel = level;
+      sfx.bed("heartbeat", { on: true, bpm, level });
+    };
     const tick = () => {
       const left = tensionDeadline - roomRef.current.serverNow();
       const t = clamp(1 - left / total, 0, 1);
       const k = t ** 1.5;
       const sec = Math.ceil(left / 1000);
       if (beating) {
-        fx.vignette(accused ? 0.14 + 0.62 * k : 0.04 + 0.32 * k, COLOR.bluff);
-        sfx.bed("heartbeat", { on: true, bpm: 60 + 54 * k, level: (accused ? 0.28 : 0.16) + (accused ? 0.32 : 0.26) * k });
+        setVignette(accused ? 0.14 + 0.62 * k : 0.04 + 0.32 * k, COLOR.bluff);
+        setHeartbeat(60 + 54 * k, (accused ? 0.28 : 0.16) + (accused ? 0.32 : 0.26) * k);
         if (sec <= 3 && sec > 0 && sec !== lastSec) feel.emit({ type: "timer.tick", seconds: sec, urgency: clamp(1 - sec / 4, 0, 1) });
       } else if (left < 10_000) {
         // my own turn running out
         const u = clamp(1 - left / 10_000, 0, 1);
-        fx.vignette(0.03 + 0.42 * u * u, u > 0.6 ? COLOR.bluff : COLOR.gold);
+        setVignette(0.03 + 0.42 * u * u, u > 0.6 ? COLOR.bluff : COLOR.gold);
         if (sec <= 10 && sec > 0 && sec !== lastSec) feel.emit({ type: "timer.tick", seconds: sec, urgency: u });
       }
       lastSec = sec;

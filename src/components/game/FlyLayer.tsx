@@ -96,7 +96,15 @@ function FlyingCard({ flight, index, ghost = 0, onDone }: { flight: Flight; inde
       onAnimationComplete={ghost === 0 ? onDone : undefined}
       data-flying-card={ghost === 0 ? "" : undefined}
     >
-      <PlayingCard faceDown={face === null} code={face ?? undefined} unit={unit} />
+      {ghost > 0 ? (
+        // trail ghosts are just the card's silhouette — no need to draw its artwork three times
+        <div
+          className={face === null ? "leery-card-back" : "bg-gradient-to-br from-white via-ivory to-[#e7dfca]"}
+          style={{ width: "5em", height: "7em", fontSize: unit, borderRadius: "0.6em" }}
+        />
+      ) : (
+        <PlayingCard faceDown={face === null} code={face ?? undefined} unit={unit} />
+      )}
     </motion.div>
   );
 }

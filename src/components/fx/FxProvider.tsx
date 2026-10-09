@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { FxController } from "@/lib/feel/contract";
 import { createFxEngine, type FxEngine } from "@/lib/fx/engine";
-import { FxContext, registerFx } from "@/lib/fx";
+import { FxContext, registerFx, shakeWriter } from "@/lib/fx";
 
 /**
  * Mounts the visual-effects layer (particle canvas, flash, vignette) and provides the controller
@@ -30,7 +30,7 @@ export function FxProvider({ children }: { children?: ReactNode }) {
   );
 
   useEffect(() => {
-    const engine = createFxEngine({ canvas: canvasRef.current, flash: flashRef.current, vignette: vignetteRef.current });
+    const engine = createFxEngine({ canvas: canvasRef.current, flash: flashRef.current, vignette: vignetteRef.current, shakeTarget: shakeWriter });
     engineRef.current = engine;
     const unregister = registerFx(controller, engine.debug);
     return () => {

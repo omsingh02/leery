@@ -3,7 +3,7 @@ import type { FxController } from "@/lib/feel/contract";
 import { getFx, getFxDebug, NO_FX, registerFx, shakeStyle } from "@/lib/fx";
 
 const fake = (): FxController => ({ shake: vi.fn(), flash: vi.fn(), burst: vi.fn(), ring: vi.fn(), vignette: vi.fn() });
-const debug = (alive: number) => () => ({ alive, rings: 0, pending: 0, max: 400, running: false, shaking: false, reduced: false, frames: 0 });
+const debug = (alive: number) => () => ({ alive, rings: 0, pending: 0, max: 400, running: false, shaking: false, reduced: false, frames: 0, quality: { level: 0 as const, dprCap: 1.5, everyN: 1 as const, countScale: 1 } });
 
 describe("global controller", () => {
   it("is a harmless no-op controller until a provider registers", () => {

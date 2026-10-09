@@ -14,8 +14,9 @@ export const MyBar = memo(function MyBar({ view, avatarRef }: { view: RoomView; 
   const count = view.me.hand.length;
   return (
     <div className="mx-auto flex w-full max-w-xl shrink-0 items-center gap-2 px-4 pt-1">
-      <div ref={avatarRef} className={cn("relative shrink-0 rounded-full transition-shadow", myTurn && "ring-2 ring-gold ring-offset-2 ring-offset-background animate-ring-pulse")}>
+      <div ref={avatarRef} className={cn("relative shrink-0 rounded-full transition-shadow", myTurn && "ring-2 ring-gold ring-offset-2 ring-offset-background")}>
         <Avatar name={mine?.name ?? "You"} color={mine?.color ?? 0} bot={false} size={28} />
+        {myTurn && <span aria-hidden className="absolute inset-0 rounded-full border-2 border-gold/70 animate-ring-pulse" />}
       </div>
       <span className={cn("max-w-[7rem] truncate text-sm font-semibold", myTurn ? "text-gold" : "text-foreground")}>{mine?.name ?? "You"}</span>
       {mine?.host && <Crown className="h-3.5 w-3.5 shrink-0 text-gold" aria-label="Host" />}

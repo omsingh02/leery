@@ -3,6 +3,7 @@ import { prefs } from "../prefs";
 import { parseColor, rgbaCss, type Rgba } from "./color";
 import { MAX_PARTICLES, ParticleSystem, type CanvasFactory } from "./particles";
 import type { Rng } from "./rng";
+import { FrameGovernor, type Quality } from "./governor";
 import { createShake, DEFAULT_DURATION_MS, type Shake, type ShakeTarget } from "./shake";
 
 /**
@@ -87,6 +88,8 @@ export interface FxDebug {
   shaking: boolean;
   reduced: boolean;
   frames: number;
+  /** The frame governor's current quality (it drops on slow devices and recovers). */
+  quality: Quality;
 }
 
 export interface FxEngine extends FxController {
@@ -115,9 +118,11 @@ export function createFxEngine(deps: FxEngineDeps): FxEngine {
   const canvas = deps.canvas;
   let ctx: CanvasRenderingContext2D | null = null;
 
+  const governor = new FrameGovernor();
   let destroyed = false;
   let rafId = 0;
   let last = 0;
+  let prevTs = 0;
   let frames = 0;
 
   /* -------------------------------------------------------------------------------- canvas */
@@ -129,7 +134,7 @@ export function createFxEngine(deps: FxEngineDeps): FxEngine {
   const measure = () => {
     const w = Math.max(1, Math.round(win?.innerWidth ?? 1));
     const h = Math.max(1, Math.round(win?.innerHeight ?? 1));
-    const ratio = Math.min(2, Math.max(1, win?.devicePixelRatio ?? 1));
+    const ratio = Math.min(governor.quality.dprCap, Math.max(1, win?.devicePixelRatio ?? 1));
     return { w, h, dpr: ratio };
   };
 
@@ -171,13 +176,24 @@ export function createFxEngine(deps: FxEngineDeps): FxEngine {
     if (destroyed) return;
     const t = Number.isFinite(ts) ? ts : now();
     const dt = Math.min(MAX_DT, Math.max(0, (t - last) / 1000));
+    const gap = prevTs ? t - prevTs : 0;
     last = t;
+    prevTs = t;
     frames++;
+    // How the whole page is coping decides how much canvas we can afford.
+    if (gap > 0 && governor.observe(gap)) {
+      particles.countScale = governor.quality.countScale;
+      sizeDirty = true;
+      ensureSize();
+    }
     if (reduced()) particles.clear();
     particles.step(dt);
-    render();
+    if (governor.quality.everyN === 1 || frames % governor.quality.everyN === 0) render();
     if (particles.active) rafId = raf(frame);
-    else hideCanvas();
+    else {
+      hideCanvas();
+      prevTs = 0;
+    }
   };
 
   const start = () => {
@@ -187,6 +203,7 @@ export function createFxEngine(deps: FxEngineDeps): FxEngine {
       canvas.style.visibility = "visible";
     }
     last = now();
+    prevTs = 0;
     rafId = raf(frame);
   };
 
@@ -341,6 +358,7 @@ export function createFxEngine(deps: FxEngineDeps): FxEngine {
         shaking: shaker.active,
         reduced: reduced(),
         frames,
+        quality: governor.quality,
       };
     },
   };

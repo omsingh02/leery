@@ -265,6 +265,8 @@ export interface ParticleSnapshot {
 
 export class ParticleSystem {
   readonly max: number;
+  /** Multiplier on every burst's particle count (the frame governor lowers it on slow devices). */
+  countScale = 1;
   private readonly rng: Rng;
   private readonly createCanvas: CanvasFactory;
 
@@ -365,7 +367,8 @@ export class ParticleSystem {
   burst(kind: BurstKind, at: Point, opts: BurstOptions = {}): number {
     const spec = KIND_SPECS[kind];
     if (!spec || !Number.isFinite(at.x) || !Number.isFinite(at.y)) return 0;
-    const wanted = Math.floor(opts.count ?? spec.count);
+    const asked = Math.floor(opts.count ?? spec.count);
+    const wanted = this.countScale === 1 || asked <= 0 ? asked : Math.max(1, Math.round(asked * this.countScale));
     const count = Math.max(0, Math.min(Number.isFinite(wanted) ? wanted : spec.count, spec.maxPerBurst));
     if (count === 0) return 0;
     const delay = Math.max(0, Math.min(10, opts.delay ?? 0));

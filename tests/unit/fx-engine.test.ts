@@ -111,12 +111,12 @@ describe("render loop", () => {
     expect(h.doc.addEventListener).toHaveBeenCalledWith("visibilitychange", expect.any(Function));
   });
 
-  it("starts one rAF loop for the first burst, sizes the canvas with the DPR clamped to 2, and shows it", () => {
+  it("starts one rAF loop for the first burst, sizes the canvas with the DPR clamped to 1.5, and shows it", () => {
     const h = build();
     h.engine.burst("sparks", PT);
     expect(h.queue.size).toBe(1);
-    expect(h.canvas.width).toBe(800); // 400 css px × min(2, 3)
-    expect(h.canvas.height).toBe(1600);
+    expect(h.canvas.width).toBe(600); // 400 css px × min(1.5, 3)
+    expect(h.canvas.height).toBe(1200);
     expect(h.canvas.style.visibility).toBe("visible");
     h.engine.burst("dust", PT);
     h.engine.ring(PT);
@@ -136,7 +136,7 @@ describe("render loop", () => {
     const h = build();
     h.engine.burst("sparks", PT);
     h.frame(16);
-    expect(h.ctx.clearRect).toHaveBeenCalledWith(0, 0, 800, 1600);
+    expect(h.ctx.clearRect).toHaveBeenCalledWith(0, 0, 600, 1200);
     expect(h.ctx.setTransform).toHaveBeenCalled();
     h.settle(16);
     expect(h.queue.size).toBe(0);
@@ -159,20 +159,47 @@ describe("render loop", () => {
     h.engine.burst("dust", PT);
     h.win.innerWidth = 500;
     fire(h.winEvents, "resize");
-    expect(h.canvas.width).toBe(1000);
+    expect(h.canvas.width).toBe(750);
     h.settle();
     h.win.innerWidth = 300;
     fire(h.winEvents, "orientationchange");
-    expect(h.canvas.width).toBe(1000); // idle: untouched
+    expect(h.canvas.width).toBe(750); // idle: untouched
     h.engine.burst("dust", PT);
-    expect(h.canvas.width).toBe(600);
+    expect(h.canvas.width).toBe(450);
   });
 
   it("an explicit resize() applies at once", () => {
     const h = build();
     h.win.innerHeight = 600;
     h.engine.resize();
-    expect(h.canvas.height).toBe(1200);
+    expect(h.canvas.height).toBe(900);
+  });
+});
+
+describe("frame governor", () => {
+  it("a device that can't keep up gets a smaller canvas, then fewer particles, then half-rate repaints", () => {
+    const h = build();
+    h.engine.burst("confetti", PT, { count: 60 });
+    expect(h.canvas.width).toBe(600); // full quality: 1.5×
+    h.frame(16);
+    const full = h.engine.particles.snapshot().length;
+    expect(full).toBe(60);
+    // a long run of 40 ms frames (25 fps)
+    let ts = 16;
+    for (let i = 0; i < 120 && h.engine.debug().quality.level < 2; i++) {
+      h.engine.burst("sparks", PT, { count: 1 }); // keep the loop alive
+      ts += 40;
+      h.frame(ts);
+    }
+    expect(h.engine.debug().quality.level).toBeGreaterThan(0);
+    expect(h.canvas.width).toBe(400); // dropped to 1×
+    const before = h.ctx.clearRect.mock.calls.length;
+    h.engine.particles.clear();
+    // fewer particles per burst from now on
+    h.engine.burst("confetti", PT, { count: 60 });
+    h.frame((ts += 40));
+    expect(h.engine.particles.snapshot().length).toBeLessThan(60);
+    expect(h.ctx.clearRect.mock.calls.length).toBeGreaterThanOrEqual(before);
   });
 });
 

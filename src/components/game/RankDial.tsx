@@ -26,12 +26,12 @@ export const RankDial = memo(function RankDial({ rank, mine, mark, className }: 
       data-testid="rank-dial"
       role="img"
       aria-label={`Claimed rank: ${RANK_SINGULAR[rank]}. Next: ${RANK_SINGULAR[next]}.`}
-      className={cn("relative flex w-full max-w-[21rem] items-end gap-px", className)}
+      className={cn("relative flex w-full max-w-[21rem] items-end gap-px lg:max-w-[27rem]", className)}
     >
       {/* The marker slides one place per turn — a plain CSS transform, so it can never drift or fly in from elsewhere. */}
       <span
         aria-hidden
-        className="pointer-events-none absolute bottom-[0.55rem] left-0 h-6 rounded-md bg-gradient-to-b from-gold to-amber-500 shadow-glow-gold"
+        className="pointer-events-none absolute bottom-[0.55rem] left-0 h-6 rounded-md bg-gradient-to-b from-gold to-amber-500 shadow-glow-gold lg:h-7"
         style={{
           width: "calc((100% - 12px) / 13)",
           transform: `translateX(calc(${index} * (100% + 1px)))`,
@@ -48,7 +48,7 @@ export const RankDial = memo(function RankDial({ rank, mine, mark, className }: 
             </span>
             <span
               className={cn(
-                "relative grid h-6 w-full place-items-center font-display text-[10px] font-bold leading-none transition-colors duration-200 sm:text-[11px]",
+                "relative grid h-6 w-full place-items-center font-display text-[10px] font-bold leading-none transition-colors duration-200 sm:text-[11px] lg:h-7 lg:text-xs",
                 here ? "text-ink" : r === next ? "text-foreground" : "text-muted/55",
               )}
             >

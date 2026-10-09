@@ -175,21 +175,25 @@ export const ActionBar = memo(function ActionBar({ room, view, selected, onPlay,
         <WindowTimer since={challenge.since} deadline={challenge.deadline} serverNow={room.serverNow} />
         {canAct ? (
           <div className="flex gap-3">
-            <Button
-              variant="bluff"
-              size={compact ? "lg" : "xl"}
-              data-testid="call-bluff"
-              className="relative flex-[1.5] animate-pulse-glow overflow-hidden"
-              disabled={!me.canCall}
-              loading={busy}
-              onClick={() => void onCall()}
-            >
-              <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
-                <span className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shine" />
-              </span>
-              <Megaphone className="relative h-5 w-5" aria-hidden />
-              <span className="relative">Call bluff!</span>
-            </Button>
+            <div className="relative flex-[1.5]">
+              {/* the pulsing glow lives on its own layer (opacity/scale only), so it costs no repaint */}
+              <span aria-hidden className="pointer-events-none absolute -inset-1 rounded-full bg-bluff/55 blur-lg animate-glow-breathe" />
+              <Button
+                variant="bluff"
+                size={compact ? "lg" : "xl"}
+                data-testid="call-bluff"
+                className="relative w-full overflow-hidden"
+                disabled={!me.canCall}
+                loading={busy}
+                onClick={() => void onCall()}
+              >
+                <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+                  <span className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shine" />
+                </span>
+                <Megaphone className="relative h-5 w-5" aria-hidden />
+                <span className="relative">Call bluff!</span>
+              </Button>
+            </div>
             <Button
               variant="trust"
               size={compact ? "lg" : "xl"}

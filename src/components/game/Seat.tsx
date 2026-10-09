@@ -37,7 +37,8 @@ export interface SeatProps {
   /** Short caption under the name, e.g. "called bluff". */
   tag?: string | null;
   /** The claim this seat just made ("2 × Sevens") — shown as a chip while the challenge is open. */
-  claim?: { count: number; rank: Rank } | null;
+  claimCount?: number | null;
+  claimRank?: Rank | null;
   /** While this seat is the accused: when the challenge window closes (the longer it waits, the more it sweats). */
   challengeDeadline?: number | null;
   /** A one-shot little animation (just threw cards, just accepted…). */
@@ -210,7 +211,8 @@ export const Seat = memo(
       role = null,
       accepted,
       tag,
-      claim,
+      claimCount,
+      claimRank,
       challengeDeadline,
       reaction,
       onCountStep,
@@ -252,7 +254,7 @@ export const Seat = memo(
           : role === "picker"
             ? "ring-2 ring-gold/80"
             : danger
-              ? "ring-2 ring-bluff/80 animate-danger-pulse"
+              ? "ring-2 ring-bluff/80"
               : "ring-1 ring-white/10";
 
     const label = [
@@ -283,7 +285,8 @@ export const Seat = memo(
         style={{ width: d.width, ...style }}
       >
         <div ref={scope} className={cn("relative rounded-full", nervous && "animate-tremble")} style={{ width: d.avatar, height: d.avatar }}>
-          {active && <span aria-hidden className="absolute inset-0 rounded-full animate-ring-pulse" />}
+          {active && <span aria-hidden className="absolute inset-0 rounded-full border-2 border-gold/70 animate-ring-pulse" />}
+          {danger && !active && !role && !reduced && <span aria-hidden className="absolute inset-0 rounded-full border-2 border-bluff/70 animate-ring-pulse" />}
           {active && <span aria-hidden className="leery-breathe absolute -inset-3 rounded-full bg-gold/25 blur-xl" />}
           <span className={cn("block rounded-full", thinking && !reduced && "animate-bob")}>
             <Avatar name={player.name} color={player.color} bot={player.bot} size={d.avatar} className={cn("transition-shadow", ring)} />
@@ -331,9 +334,9 @@ export const Seat = memo(
               <i className="leery-dot" />
               <i className="leery-dot" />
             </span>
-          ) : claim ? (
+          ) : claimCount && claimRank ? (
             <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-bluff/15 py-px pl-1 pr-1.5 text-[10px] font-bold text-rose-100 animate-pop-in">
-              <RankChip rank={claim.rank} size="sm" className="!h-[18px] !w-[13px] !text-[10px]" />×{claim.count}
+              <RankChip rank={claimRank} size="sm" className="!h-[18px] !w-[13px] !text-[10px]" />×{claimCount}
             </span>
           ) : tag ? (
             <span className={cn("whitespace-nowrap rounded-full px-1.5 py-px text-[10px] font-bold uppercase tracking-wide", role ? ROLE_TAG[role] : "bg-white/10 text-muted")}>

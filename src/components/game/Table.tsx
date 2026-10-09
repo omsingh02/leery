@@ -113,7 +113,8 @@ export function Table({ view, serverNow, pileRef, registerSeat, pileImpact = 0, 
         role={st.role}
         accepted={st.accepted}
         tag={st.tag}
-        claim={st.claim}
+        claimCount={st.claim?.count ?? null}
+        claimRank={st.claim?.rank ?? null}
         challengeDeadline={st.challengeDeadline}
         reaction={reactions?.[p.id] ?? null}
         onCountStep={onCountStep}
@@ -132,6 +133,12 @@ export function Table({ view, serverNow, pileRef, registerSeat, pileImpact = 0, 
   }, [view.me.hand]);
   const next = myNextTurn(view);
 
+  const arcStyles = useMemo<CSSProperties[]>(
+    () =>
+      arcPositions(n).map((a) => ({ position: "absolute", left: `${a.x}%`, top: `${a.y}%`, transform: "translate(-50%, -50%)" })),
+    [n],
+  );
+
   const feltContent = (
     <>
       {dialRank && !short && <RankDial rank={dialRank} mine={mine} mark={next && next.turnsAway > 0 ? next.rank : null} />}
@@ -141,7 +148,6 @@ export function Table({ view, serverNow, pileRef, registerSeat, pileImpact = 0, 
   );
 
   if (arcLayout) {
-    const arc = arcPositions(n);
     return (
       <div className="mx-auto flex min-h-0 w-full max-w-[1180px] flex-1 flex-col px-8">
         <div className={cn("relative flex-1", short ? "min-h-[240px]" : "min-h-[320px]")}>
@@ -153,14 +159,7 @@ export function Table({ view, serverNow, pileRef, registerSeat, pileImpact = 0, 
           >
             <div className="m-auto flex flex-col items-center gap-4">{feltContent}</div>
           </div>
-          {opponents.map((p, i) =>
-            renderSeat(p, {
-              position: "absolute",
-              left: `${arc[i].x}%`,
-              top: `${arc[i].y}%`,
-              transform: "translate(-50%, -50%)",
-            }),
-          )}
+          {opponents.map((p, i) => renderSeat(p, arcStyles[i]))}
         </div>
         {children}
       </div>

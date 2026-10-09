@@ -10,7 +10,7 @@ import { SettingsDialog } from "@/components/shell/SettingsDialog";
 import { SoundToggle } from "@/components/shell/SoundToggle";
 import type { RoomController } from "@/hooks/useRoom";
 import { describeLog, RANK_PLURAL } from "@/lib/game";
-import { shakeStyle } from "@/lib/fx";
+import { useShakeTarget } from "@/lib/fx";
 import { hints, useHint } from "@/lib/hints";
 import type { CardCode, RoomView } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -165,6 +165,8 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
   const [copied, setCopied] = useState(false);
   const [dragState, setDragState] = useState<DragState>("idle");
 
+  const rootRef = useRef<HTMLDivElement>(null);
+  useShakeTarget(rootRef);
   const pileRef = useRef<HTMLDivElement>(null);
   const handWrapRef = useRef<HTMLDivElement>(null);
   const myBarRef = useRef<HTMLDivElement>(null);
@@ -195,13 +197,14 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
   const onLimit = useCallback(() => setLimitHits((h) => h + 1), []);
 
   /** Play: the cards leave the hand at once (the director flies them), the request follows. */
+  const { playCards } = d;
   const play = useCallback(
     (cards: CardCode[]) => {
       if (cards.length === 0) return;
       setSelected([]);
-      void d.playCards(cards);
+      void playCards(cards);
     },
-    [d],
+    [playCards],
   );
 
   const myTurn = view.status === "turn" && view.turn?.player === me.id;
@@ -253,9 +256,22 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
   const claimRank = view.turn?.rank;
   const dragLabel = `${Math.max(1, selected.length)} as ${claimRank ? RANK_PLURAL[claimRank] : "the rank"}`;
   const pileFrom: Point | null = centerOf(pileRef.current);
+  const { done: dragTipDone } = dragTip;
+  const dragProps = useMemo(
+    () => ({
+      enabled: canDrag,
+      label: dragLabel,
+      onPlay: (cards: CardCode[]) => {
+        dragTipDone();
+        play(cards);
+      },
+      onState: setDragState,
+    }),
+    [canDrag, dragLabel, dragTipDone, play],
+  );
 
   return (
-    <div data-testid="game-screen" style={shakeStyle} className="relative mx-auto flex h-dvh min-h-[520px] w-full flex-col overflow-hidden">
+    <div ref={rootRef} data-testid="game-screen" className="relative mx-auto flex h-dvh min-h-[520px] w-full flex-col overflow-hidden">
       <header className="safe-pt relative z-40 flex shrink-0 items-center gap-1.5 px-3 pb-1 pt-1 lg:px-6">
         <button
           type="button"
@@ -304,7 +320,7 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
               <div
                 aria-hidden
                 className={cn(
-                  "pointer-events-none absolute inset-x-0 -bottom-3 h-28 bg-gradient-to-t from-gold/[0.16] via-gold/[0.05] to-transparent transition-opacity duration-500",
+                  "pointer-events-none absolute -bottom-4 left-1/2 h-32 w-[min(100%,46rem)] -translate-x-1/2 bg-[radial-gradient(ellipse_at_50%_100%,hsl(var(--gold)/0.22),transparent_68%)] transition-opacity duration-500",
                   myTurn && me.canPlay ? "opacity-100" : "opacity-0",
                 )}
               />
@@ -324,15 +340,7 @@ function GameScreenInner({ room, view }: { room: RoomController; view: RoomView 
                 compact={short}
                 arrivals={d.arrivals}
                 waveKey={d.waveKey}
-                drag={{
-                  enabled: canDrag,
-                  label: dragLabel,
-                  onPlay: (cards) => {
-                    dragTip.done();
-                    play(cards);
-                  },
-                  onState: setDragState,
-                }}
+                drag={dragProps}
               />
             </div>
             <div className="relative">
