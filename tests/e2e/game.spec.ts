@@ -3,6 +3,7 @@ import {
   autoplay,
   createRoom,
   expectDeckIntact,
+  expectHand,
   joinByLink,
   newDevice,
   roomCodeFromUrl,
@@ -157,6 +158,7 @@ test.describe("Leery (real UI ↔ real engine)", () => {
 
     // Alice (seat 0) is about to play her very last card — honestly (it's Aces' turn).
     await setupPosition(code, { seat: 0, rankIdx: 0, hands: { 0: ["AH"], 1: ["5C", "6C", "7C"] } });
+    await expectHand(alice, ["AH"]);
     await expect(alice.getByTestId("play-button")).toBeVisible({ timeout: 15_000 });
     await alice.getByTestId("hand").locator('[data-testid="card-AH"]').click({ position: { x: 6, y: 24 } });
     await alice.getByTestId("play-button").click();

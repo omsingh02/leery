@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createRoom, joinByLink, newDevice, setupPosition, sql, watch } from "./helpers";
+import { createRoom, expectHand, joinByLink, newDevice, setupPosition, sql, watch } from "./helpers";
 
 /** The feel layer: gestures, first-time tips and comfort settings — against the real UI and engine. */
 test.describe("Leery game feel (real UI ↔ real engine)", () => {
@@ -15,6 +15,7 @@ test.describe("Leery game feel (real UI ↔ real engine)", () => {
 
     // Alice to play Aces, holding AH (honest) and two others.
     await setupPosition(code, { seat: 0, rankIdx: 0, hands: { 0: ["AH", "5C", "9D"], 1: ["5S", "6C", "7C"] } });
+    await expectHand(page, ["AH", "5C", "9D"]);
     await expect(page.getByTestId("play-button")).toBeVisible({ timeout: 15_000 });
     const card = page.getByTestId("hand").locator('[data-testid="card-AH"]');
     const box = await card.boundingBox();
@@ -59,6 +60,7 @@ test.describe("Leery game feel (real UI ↔ real engine)", () => {
     await page.getByTestId("start-game").click();
     await expect(page.getByTestId("game-screen")).toBeVisible({ timeout: 20_000 });
     await setupPosition(code, { seat: 0, rankIdx: 0, hands: { 0: ["AH", "5C", "9D"], 1: ["5S", "6C", "7C"] } });
+    await expectHand(page, ["AH", "5C", "9D"]);
     await expect(page.getByTestId("play-button")).toBeVisible({ timeout: 15_000 });
 
     // The select tip is waiting for a brand-new player…
