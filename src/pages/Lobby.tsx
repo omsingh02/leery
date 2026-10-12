@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bot, Check, Crown, Link2, LogOut, Play, Share2, X } from "lucide-react";
 import { toast } from "sonner";
+import { notifyError } from "@/lib/notify";
 import { Badge } from "@/components/shell/Badge";
 import { Logo } from "@/components/shell/Logo";
 import { RulesButton } from "@/components/shell/RulesDialog";
+import { SettingsButton } from "@/components/shell/SettingsDialog";
 import { SoundToggle } from "@/components/shell/SoundToggle";
 import { useReturnFocus } from "@/components/shell/useReturnFocus";
 import { WaitingDots } from "@/components/shell/WaitingDots";
@@ -14,7 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog";
 import type { RoomController } from "@/hooks/useRoom";
 import { BOT_STYLES, SPEEDS } from "@/lib/game";
-import { sfx } from "@/lib/sound";
+import { feel } from "@/lib/feel";
+import { useShakeTarget } from "@/lib/fx";
 import { MAX_PLAYERS, MIN_PLAYERS, type PlayerView, type RoomView, type Speed } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { copyText, inviteLink, useDocumentTitle } from "./helpers";
@@ -37,6 +40,8 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
   const [leaving, setLeaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const copiedTimer = useRef<number | undefined>(undefined);
+  const mainRef = useRef<HTMLElement>(null);
+  useShakeTarget(mainRef); // so the effects preview in Settings can shake something
   const returnFocus = useReturnFocus();
 
   useDocumentTitle(`Lobby · ${code}`);
@@ -44,7 +49,8 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
   // A little "pop" whenever someone new sits down.
   const prevCount = useRef(players.length);
   useEffect(() => {
-    if (players.length > prevCount.current) sfx.play("join");
+    if (players.length > prevCount.current) feel.emit({ type: "lobby.join" });
+    else if (players.length < prevCount.current) feel.emit({ type: "lobby.leave" });
     prevCount.current = players.length;
   }, [players.length]);
 
@@ -59,18 +65,20 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
   async function copyCode() {
     if (await copyText(code)) {
       flash("code");
+      feel.emit({ type: "ui.copy" });
       toast.success("Room code copied");
     } else {
-      toast.error("Couldn't copy — press and hold the code instead");
+      notifyError("Couldn't copy — press and hold the code instead");
     }
   }
 
   async function copyLink() {
     if (await copyText(inviteLink(code))) {
       flash("link");
+      feel.emit({ type: "ui.copy" });
       toast.success("Invite link copied");
     } else {
-      toast.error("Couldn't copy the link");
+      notifyError("Couldn't copy the link");
     }
   }
 
@@ -82,7 +90,7 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
         url: inviteLink(code),
       });
     } catch (e) {
-      if (!(e instanceof DOMException && e.name === "AbortError")) toast.error("Couldn't open the share sheet");
+      if (!(e instanceof DOMException && e.name === "AbortError")) notifyError("Couldn't open the share sheet");
     }
   }
 
@@ -107,14 +115,17 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
       : `You can hop back in with the code ${code} while the lobby is open.`;
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 safe-pt safe-pb max-lg:pb-40 sm:px-8" data-testid="lobby">
+    <main ref={mainRef} className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 safe-pt safe-pb max-lg:pb-40 sm:px-8" data-testid="lobby">
       <header className="flex items-center justify-between py-3">
         <Logo size="sm" />
         <div className="flex items-center gap-1">
-          <RulesButton />
+          <RulesButton compact />
           <SoundToggle />
+          <SettingsButton />
         </div>
       </header>
+
+      <h1 className="sr-only">Lobby for room {code}</h1>
 
       <div className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start items-start gap-4 pb-6 pt-1 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-6 lg:pt-8">
         {/* ------------------------------------------------ room code + invite */}
@@ -129,7 +140,7 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
             type="button"
             data-testid="room-code"
             onClick={() => void copyCode()}
-            aria-label={`Room code ${code.split("").join(" ")}. Tap to copy.`}
+            aria-label={`Room code ${code}. Tap to copy.`}
             className="mx-auto mt-3 flex gap-1.5 rounded-2xl outline-offset-4 sm:gap-2"
           >
             {code.split("").map((ch, i) => (
@@ -194,12 +205,13 @@ export function Lobby({ room, view }: { room: RoomController; view: RoomView }) 
               <li
                 key={`empty-${i}`}
                 aria-hidden
-                className={cn(
-                  "flex h-[58px] animate-pulse items-center gap-3 rounded-2xl border border-dashed border-white/10 px-3 text-sm text-muted/70",
-                  i >= 2 && "max-lg:hidden",
-                )}
-                style={{ animationDelay: `${i * 160}ms`, animationDuration: "2.6s" }}
+                className={cn("relative flex h-[58px] items-center gap-3 rounded-2xl px-3 text-sm text-muted/85", i >= 2 && "max-lg:hidden")}
               >
+                {/* Only the outline breathes: pulsing the text itself would dip it below readable contrast. */}
+                <span
+                  className="absolute inset-0 animate-pulse rounded-2xl border border-dashed border-white/10"
+                  style={{ animationDelay: `${i * 160}ms`, animationDuration: "2.6s" }}
+                />
                 <span className="grid h-[42px] w-[42px] place-items-center rounded-full border border-dashed border-white/15" />
                 Waiting for player…
               </li>
@@ -387,11 +399,23 @@ function SpeedPicker({
   editable: boolean;
   onChange: (speed: Speed) => void;
 }) {
+  const speeds = Object.keys(SPEEDS) as Speed[];
+  const index = speeds.indexOf(value);
   return (
     <fieldset disabled={!editable} className="min-w-0">
       <legend className="sr-only">Game speed</legend>
-      <div className="grid grid-cols-3 gap-1.5 rounded-2xl bg-black/30 p-1.5">
-        {(Object.keys(SPEEDS) as Speed[]).map((s) => {
+      <div className="relative grid grid-cols-3 gap-1.5 rounded-2xl bg-black/30 p-1.5">
+        {/* The marker glides to the chosen speed (plain CSS transform: no layout measuring to go wrong). */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-1.5 left-1.5 rounded-xl bg-gradient-to-br from-primary to-accent shadow-glow-primary"
+          style={{
+            width: "calc((100% - 0.75rem - 0.75rem) / 3)",
+            transform: `translateX(calc(${index} * (100% + 0.375rem)))`,
+            transition: "transform 320ms cubic-bezier(0.34, 1.35, 0.5, 1)",
+          }}
+        />
+        {speeds.map((s) => {
           const checked = value === s;
           const [turn, call] = SPEEDS[s].blurb.split(" · ");
           return (
@@ -399,11 +423,9 @@ function SpeedPicker({
               key={s}
               data-testid={`speed-${s}`}
               className={cn(
-                "relative rounded-xl px-1.5 py-2.5 text-center transition-all duration-200",
+                "relative rounded-xl px-1.5 py-2.5 text-center transition-colors duration-200",
                 editable ? "cursor-pointer" : "cursor-default",
-                checked
-                  ? "bg-gradient-to-br from-primary to-accent text-white shadow-glow-primary"
-                  : cn("text-muted", editable && "hover:bg-white/[0.06] hover:text-foreground"),
+                checked ? "text-white" : cn("text-muted", editable && "hover:text-foreground"),
               )}
             >
               <input
@@ -411,13 +433,16 @@ function SpeedPicker({
                 name="speed"
                 value={s}
                 checked={checked}
-                onChange={() => onChange(s)}
+                onChange={() => {
+                  feel.emit({ type: "ui.toggle", on: true });
+                  onChange(s);
+                }}
                 className="peer sr-only"
               />
               <span aria-hidden className="pointer-events-none absolute inset-0 rounded-xl ring-2 ring-ring opacity-0 peer-focus-visible:opacity-100" />
-              <span className="block font-display text-[13px] font-bold">{SPEEDS[s].label}</span>
-              <span className="mt-1 block text-[10.5px] leading-tight opacity-85">{turn}</span>
-              <span className="block text-[10.5px] leading-tight opacity-85">{call}</span>
+              <span className="relative block font-display text-[13px] font-bold">{SPEEDS[s].label}</span>
+              <span className="relative mt-1 block text-[10.5px] leading-tight opacity-85">{turn}</span>
+              <span className="relative block text-[10.5px] leading-tight opacity-85">{call}</span>
             </label>
           );
         })}

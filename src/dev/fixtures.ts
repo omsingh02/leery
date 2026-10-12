@@ -128,14 +128,17 @@ export const FIXTURE_NAMES = [
   "turn-theirs",
   "turn-bot",
   "turn-auto",
+  "turn-last-card",
   "challenge-call",
   "challenge-passed",
   "challenge-accused",
   "reveal-bluff",
   "reveal-honest",
   "eight-players",
+  "eight-challenge",
   "finished-win",
   "finished-lose",
+  "finished-long-name",
   "preview",
   "preview-started",
 ] as const;
@@ -193,6 +196,9 @@ export function fixture(name: FixtureName, now = Date.now()): RoomView | RoomPre
       return base(now, { turn: turnOf("p-mira", now), due: now + 31000 });
     case "turn-bot":
       return base(now, { turn: turnOf("p-vex", now, false), due: now + 1400 });
+    case "turn-last-card":
+      // somebody is down to one card, somebody to two: the table should feel the pressure
+      return base(now, { turn: turnOf("p-mira", now), due: now + 31000, players: FOUR({}, [12, 13, 1, 2]) });
     case "turn-auto":
       return base(now, {
         turn: turnOf(ME, now, false),
@@ -234,6 +240,15 @@ export function fixture(name: FixtureName, now = Date.now()): RoomView | RoomPre
         due: now + 31000,
         me: { ...base(now).me, canPlay: false },
       });
+    case "eight-challenge": // the tallest banner on the most crowded table: the worst case for the felt
+      return base(now, {
+        players: eight(),
+        status: "challenge",
+        challenge: { ...challengeBy("p-p5", now), count: 3 },
+        due: now + 4500,
+        pile: 12,
+        me: { ...base(now).me, canCall: true, canPass: true },
+      });
     case "finished-win":
       return base(now, {
         status: "finished",
@@ -241,6 +256,13 @@ export function fixture(name: FixtureName, now = Date.now()): RoomView | RoomPre
         pile: 4,
         players: FOUR({}, [0, 6, 9, 3]),
         me: { ...base(now).me, hand: [] },
+      });
+    case "finished-long-name": // the longest name allowed, in a very wide display face
+      return base(now, {
+        status: "finished",
+        winner: "p-vex",
+        pile: 4,
+        players: FOUR({}, [7, 6, 0, 3]).map((p) => (p.id === "p-vex" ? { ...p, name: "SuperMarioFan123" } : p)),
       });
     case "finished-lose":
       return base(now, {

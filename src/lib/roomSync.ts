@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { notifyError } from "./notify";
 import { api, ApiError } from "./api";
 import { clearLastRoom, setLastRoom, setName } from "./session";
 import { REALTIME_ENABLED, supabase } from "./supabase";
@@ -261,7 +262,7 @@ export class RoomSync {
     } catch (e) {
       const err = e instanceof ApiError ? e : new ApiError("unknown");
       if (err.code === "bad_phase" || err.code === "not_your_turn") toast(err.message);
-      else toast.error(err.message);
+      else notifyError(err.message);
       void this.refresh();
       return false;
     } finally {
@@ -298,7 +299,7 @@ export class RoomSync {
         clearLastRoom();
         return true;
       }
-      toast.error(err.message);
+      notifyError(err.message);
       return false;
     }
   };

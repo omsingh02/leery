@@ -145,3 +145,14 @@ export async function setupPosition(code: string, o: { seat: number; rankIdx?: n
     [code, o.seat, o.rankIdx ?? 0],
   );
 }
+
+/**
+ * `setupPosition` writes straight to the database, so a client shows the new hands only after its next poll. Until
+ * then it still shows the dealt ones — and may even hold the same card, somewhere else, which is how a gesture
+ * aimed at it misses. Wait for this page's hand to be exactly `codes` before acting on it.
+ */
+export async function expectHand(page: Page, codes: string[]) {
+  const hand = page.getByTestId("hand");
+  await expect(hand.locator('[data-testid^="card-"]')).toHaveCount(codes.length, { timeout: 15_000 });
+  for (const c of codes) await expect(hand.locator(`[data-testid="card-${c}"]`)).toBeVisible();
+}

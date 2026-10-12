@@ -93,7 +93,7 @@ export function RulesDialog({ open, onOpenChange }: { open: boolean; onOpenChang
 }
 
 /** Ghost "How to play" button that owns its dialog state. */
-export function RulesButton({ className, label = "How to play" }: { className?: string; label?: string }) {
+export function RulesButton({ className, label = "How to play", compact = false }: { className?: string; label?: string; /** Icon only on very narrow screens (the label stays available to screen readers). */ compact?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -106,7 +106,7 @@ export function RulesButton({ className, label = "How to play" }: { className?: 
         aria-haspopup="dialog"
       >
         <HelpCircle className="h-4 w-4" aria-hidden />
-        {label}
+        <span className={cn(compact && "max-[379px]:sr-only")}>{label}</span>
       </Button>
       <RulesDialog open={open} onOpenChange={setOpen} />
     </>
