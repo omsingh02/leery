@@ -85,15 +85,29 @@
   transition: transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
 
-/* The felt drops things in a fixed order when its content doesn't fit (Table.tsx sets data-fit, 0 = everything):
-   1 the sub-line under the banner · 2 a smaller pile (in JS) · 3 the rank dial · 4 the smallest pile (in JS) ·
-   5 the small label above the banner and the prompt under it. */
-.felt:is([data-fit="1"], [data-fit="2"], [data-fit="3"], [data-fit="4"], [data-fit="5"]) .fit-sub {
+/* The felt gives things up when its content doesn't fit (feltFit.ts decides the order and sets data-fit-drop to the
+   names of what is gone, e.g. "sub dial labels"; data-fit is the plain level, 0 = everything). Name-based so a new
+   level can't leave a rule behind. `row` is phones only: the pile goes beside the banner, the border thins, the title
+   and its rank chip get smaller. */
+.felt[data-fit-drop~="sub"] .fit-sub,
+.felt[data-fit-drop~="dial"] .fit-dial,
+.felt[data-fit-drop~="labels"] :is(.fit-over, .fit-prompt) {
   display: none;
 }
-.felt:is([data-fit="3"], [data-fit="4"], [data-fit="5"]) .fit-dial {
-  display: none;
+.felt[data-fit-drop~="row"] {
+  padding-block: 0.25rem;
 }
-.felt[data-fit="5"] :is(.fit-over, .fit-prompt) {
-  display: none;
+.felt[data-fit-drop~="row"] .fit-row {
+  flex-direction: row-reverse;
+  gap: 0.5rem;
+}
+.felt[data-fit-drop~="row"] .fit-title {
+  font-size: 0.9375rem;
+  column-gap: 0.375rem;
+  row-gap: 0.125rem;
+}
+.felt[data-fit-drop~="row"] .fit-chip {
+  height: 2rem;
+  min-width: 1.75rem;
+  font-size: 1.0625rem;
 }

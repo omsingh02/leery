@@ -20,8 +20,9 @@ add to it without breaking it.
 - **One story, three channels.** Every moment is described once — as a semantic event — and turned into *sound*,
   *vibration* and *visual effects* together, so they can never drift apart.
 - **Restraint, and a way out.** Haptics are short and never nag. Sound, vibration and screen effects each have a
-  switch in **Settings**, "Reduced" effects removes all shake, flashes and particles and keeps only what's needed to
-  follow the game, and "Auto" follows the device's reduce-motion setting.
+  switch in **Settings**; "Reduced" effects removes shake, flashes, particles and every decorative animation and keeps
+  only what's needed to follow the game, and "Auto" follows the device's reduce-motion setting. (`<html data-effects>`
+  carries the effective state, so the stylesheet and framer-motion obey it as well as the canvas.)
 - **Free to run.** No audio files, no image sprites, nothing to download: sounds are synthesised, effects are drawn on
   one canvas. Effects are the first thing to give when a phone struggles (see [Performance](#performance)).
 
@@ -75,7 +76,7 @@ The labs run without a backend: `npm run dev:ui`, then
 | --- | --- |
 | `/dev/audio.html` | Audition every cue (with `n`, level, pan and duration sliders), whole scenarios — a reveal, the last three seconds, the deal — and the heartbeat and ambience loops. Toggles for sound and vibration. |
 | `/dev/fx.html` | Fire every effect with every knob; click anywhere to place it. A heads-up display shows live particle counts and frame timing. |
-| `/dev/game.html?sim=1` | A scripted game: play cards, get called, pick up the pile, watch the next turn. Add `&reduced=1` for reduced motion. |
+| `/dev/game.html?sim=1` | A scripted game: play cards, get called, pick up the pile, watch the next turn. Add `&reduced=1` (or `=0`) to flip the real Screen effects setting. |
 | `/dev/game.html?deal=1` | The opening deal of a brand-new game. |
 | `/dev/game.html?state=reveal-bluff` | Any fixture frozen in a state (see `FIXTURE_NAMES`). |
 
@@ -114,9 +115,28 @@ A card game is mostly a stack of small animations, so it's easy to make it slow 
   real gap between frames and, if the device struggles, shrinks the canvas, halves particle counts, then repaints every
   other frame — and climbs back after a couple of comfortable seconds.
 - The audio engine is built right after the first frame of the first tap has painted (an `AudioContext` takes tens of
-  milliseconds to create), never inside an input handler.
+  milliseconds to create), rather than at the moment the finger lifts.
+- Opponents' seats re-render only when their own data changes; a countdown with no deadline doesn't tick.
+- Only the most recent beats of a burst of old log entries are staged — a phone coming back from the background
+  doesn't replay twelve plays at once.
 
 Measure on a production build (`npm run build && npm run preview`) with CPU throttling; the dev build is much slower.
+
+### Small screens
+
+The felt (the green table) shows the rank dial, the banner and the pile, and how tall that is depends on the phone: the
+banner wraps on a narrow screen, a 25-card hand takes three rows, eight opponents need two rails above it. The vertical
+budget is what the browser leaves you, not the screen size — an iPhone SE in Safari is about 375×553 once the toolbars
+are up. After layout the table measures itself and, if the pile would be clipped, steps down one level at a time
+(`useFeltFit` in `feltFit.ts`):
+
+1. drop the banner's sub-line · 2. a smaller pile · 3. drop the rank dial · 4. the smallest regular pile ·
+5. drop the small label above the banner and the prompt under it · 6. (phones) the pile beside the banner instead of
+under it, a thinner felt border, a smaller title and rank chip · 7. (phones) a still smaller pile.
+
+`tests/unit/feltFit.test.ts` pins the order and that `game.css` keeps everything dropped once it is dropped. Check a
+change at 320×568, 360×560, 375×553, 390×664 and 390×844 (`/dev/game.html?state=…`): `turn-mine-many` (25 cards),
+`eight-players` and `eight-challenge` (the tallest banner on the most crowded table) are the stress cases.
 
 ## Tests
 
@@ -125,6 +145,7 @@ Measure on a production build (`npm run build && npm run preview`) with CPU thro
 | Event → cues/haptics/FX mapping | `tests/unit/feelPlan.test.ts` |
 | Detecting what happened between two snapshots; holds | `tests/unit/director.test.ts` |
 | Reveal timeline fits the server's hold | `tests/unit/revealTimeline.test.ts` |
+| What the felt drops, in what order, on a small phone | `tests/unit/feltFit.test.ts` |
 | Synth maths, notes, analysis, cue bookkeeping, the facade, when the engine is built | `tests/unit/sound.*.test.ts` |
 | Haptic patterns and gating | `tests/unit/haptics.test.ts` |
 | Particles, shake, governor, canvas engine | `tests/unit/fx-*.test.ts` |

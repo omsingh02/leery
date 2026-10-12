@@ -38,7 +38,7 @@ const Overline = ({ children, tone = "muted" }: { children: ReactNode; tone?: "g
 );
 
 const Title = ({ children }: { children: ReactNode }) => (
-  <h2 className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 font-display text-lg font-bold leading-tight sm:text-xl lg:text-2xl [@media(max-height:700px)]:text-base [@media(max-height:700px)]:lg:text-xl">
+  <h2 className="fit-title flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 font-display text-lg font-bold leading-tight sm:text-xl lg:text-2xl [@media(max-height:700px)]:text-base [@media(max-height:700px)]:lg:text-xl">
     {children}
   </h2>
 );
@@ -68,7 +68,7 @@ export const PhaseBanner = memo(function PhaseBanner({ view, serverNow }: { view
         <Overline tone="gold">Autopilot</Overline>
         <Title>
           <span className="text-muted">Playing</span>
-          <RankChip rank={turn.rank} size="lg" />
+          <RankChip rank={turn.rank} size="lg" className="fit-chip" />
           <span className="text-gold">{RANK_PLURAL[turn.rank]}</span>
           <span className="text-muted">for you…</span>
         </Title>
@@ -79,7 +79,7 @@ export const PhaseBanner = memo(function PhaseBanner({ view, serverNow }: { view
         <Overline tone="gold">Your turn</Overline>
         <Title>
           <span>Play</span>
-          <RankChip rank={turn.rank} size="lg" />
+          <RankChip rank={turn.rank} size="lg" className="fit-chip" />
           <span className="text-gold">{RANK_PLURAL[turn.rank]}</span>
         </Title>
         <Sub>
@@ -92,7 +92,7 @@ export const PhaseBanner = memo(function PhaseBanner({ view, serverNow }: { view
         <Title>
           <span className="max-w-[12ch] truncate sm:max-w-[18ch]">{who?.name ?? "Someone"}</span>
           <span className="text-muted">is playing</span>
-          <RankChip rank={turn.rank} size="lg" />
+          <RankChip rank={turn.rank} size="lg" className="fit-chip" />
           <span className="text-gold">{RANK_PLURAL[turn.rank]}…</span>
         </Title>
         <Sub className="flex items-center gap-2">

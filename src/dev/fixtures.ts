@@ -135,6 +135,7 @@ export const FIXTURE_NAMES = [
   "reveal-bluff",
   "reveal-honest",
   "eight-players",
+  "eight-challenge",
   "finished-win",
   "finished-lose",
   "finished-long-name",
@@ -238,6 +239,15 @@ export function fixture(name: FixtureName, now = Date.now()): RoomView | RoomPre
         turn: { ...turnOf("p-p5", now), player: "p-p5" },
         due: now + 31000,
         me: { ...base(now).me, canPlay: false },
+      });
+    case "eight-challenge": // the tallest banner on the most crowded table: the worst case for the felt
+      return base(now, {
+        players: eight(),
+        status: "challenge",
+        challenge: { ...challengeBy("p-p5", now), count: 3 },
+        due: now + 4500,
+        pile: 12,
+        me: { ...base(now).me, canCall: true, canPass: true },
       });
     case "finished-win":
       return base(now, {
