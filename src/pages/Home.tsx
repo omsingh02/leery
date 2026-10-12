@@ -323,11 +323,11 @@ export function Home() {
         </div>
         <p className="text-right leading-relaxed">
           © 2026{" "}
-          <a href="https://github.com/omsingh02" className="underline-offset-2 hover:text-foreground hover:underline" target="_blank" rel="noreferrer">
+          <a href="https://github.com/omsingh02" className="-my-2 inline-block py-2 underline-offset-2 hover:text-foreground hover:underline" target="_blank" rel="noreferrer">
             Om Singh
           </a>{" "}
           ·{" "}
-          <a href="https://github.com/omsingh02/leery" className="underline-offset-2 hover:text-foreground hover:underline" target="_blank" rel="noreferrer">
+          <a href="https://github.com/omsingh02/leery" className="-my-2 inline-block py-2 underline-offset-2 hover:text-foreground hover:underline" target="_blank" rel="noreferrer">
             Source
           </a>
         </p>
