@@ -97,17 +97,18 @@ const server = http.createServer(async (req, res) => {
   const m = /^\/rest\/v1\/rpc\/([a-z_]+)$/.exec(pathname);
   if (req.method !== "POST" || !m) return send(res, 404, { message: "not found", code: "PGRST000" });
 
-  const fn = m[1];
-  const sig = signatures.get(fn);
-  if (!sig) {
-    return send(res, 404, { code: "PGRST202", message: `Could not find the function public.${fn} in the schema cache`, details: null, hint: null });
+  // The URL only selects an entry; the query below uses the catalog's own spelling of the name, never the request's.
+  const entry = [...signatures].find(([name]) => name === m[1]);
+  if (!entry) {
+    return send(res, 404, { code: "PGRST202", message: `Could not find the function public.${m[1]} in the schema cache`, details: null, hint: null });
   }
+  const [fn, sig] = entry;
 
   try {
     const body = await readBody(req);
     const args = sig.filter((a) => a.name in body);
-    const named = args.map((a, i) => `${a.name} => $${i + 1}::${a.type}`).join(", ");
-    const result = await pool.query(`select public.${fn}(${named}) as r`, args.map((a) => body[a.name]));
+    const named = args.map((a, i) => `${pg.escapeIdentifier(a.name)} => $${i + 1}::${a.type}`).join(", ");
+    const result = await pool.query(`select public.${pg.escapeIdentifier(fn)}(${named}) as r`, args.map((a) => body[a.name]));
     return send(res, 200, result.rows[0].r);
   } catch (e) {
     // PostgREST maps RAISE EXCEPTION (P0001) to 400 with the message; permission errors to 401/403, etc.

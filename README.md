@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://leery.vercel.app"><strong>▶ Play now</strong></a> &nbsp;·&nbsp;
+  <a href="https://leery.omsingh.me"><strong>▶ Play now</strong></a> &nbsp;·&nbsp;
   <a href="#how-to-play">How to play</a> &nbsp;·&nbsp;
   <a href="#run-it-yourself">Run it yourself</a> &nbsp;·&nbsp;
   <a href="#how-it-works">How it works</a>
@@ -17,7 +17,7 @@
 <p align="center">
   <a href="https://github.com/omsingh02/leery/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/omsingh02/leery/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-8b5cf6"></a>
-  <a href="https://leery.vercel.app"><img alt="Play online" src="https://img.shields.io/badge/play-leery.vercel.app-ec4899"></a>
+  <a href="https://leery.omsingh.me"><img alt="Play online" src="https://img.shields.io/badge/play-leery.omsingh.me-ec4899"></a>
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178c6">
   <img alt="Rules run in Postgres" src="https://img.shields.io/badge/rules-run%20in%20Postgres-336791">
 </p>
@@ -45,8 +45,11 @@ database, so nobody can peek at your hand, play out of turn, or fake a result.
   who leaves is replaced by a bot, and a silent host hands the role on.
 - **Cheat-proof by design.** Hands never leave the database, every action is validated server-side, and the only API is
   a short list of functions rather than open tables. See [Security](#security).
-- **Built for phones.** Thumb-friendly controls, sound effects, a buzz when it's your turn, reduced-motion support and a
+- **Built for phones.** Thumb-friendly controls, drag picked cards up onto the table to play them, and a
   keyboard-accessible hand on desktop.
+- **A table with weight.** Cards slap down, a caught bluff shakes the screen, and the last card of a reveal waits for a
+  drumroll. Sound is synthesised live (no audio files), phones buzz in the right places, and all of it can be switched
+  off or toned down. See [Game feel](#game-feel).
 - **Instant, but resilient.** Realtime pings when available, automatic fallback to polling when not.
 
 ## Screenshots
@@ -71,6 +74,30 @@ On a big screen the table opens up, with up to seven opponents around the felt:
   <img src="docs/screenshots/desktop-lobby.webp" alt="Leery lobby on desktop" width="435" title="Desktop lobby">
   <img src="docs/screenshots/desktop-table.webp" alt="Leery table on desktop: an oval felt table, your hand along the bottom" width="435" title="Desktop table">
 </p>
+
+## Game feel
+
+<p align="center">
+  <img src="docs/screenshots/bluff-called.webp" alt="A bluff being called: the claim, the cards turning over one by one, the BLUFF! stamp and the pickup" width="300">
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/settings.webp" alt="Settings: sound effects, vibration and screen effects" width="300">
+</p>
+
+Leery is built to feel like a game, not a form.
+
+- **Instant response.** Cards and buttons press in the moment a finger lands, and a card you play leaves your hand before
+  the server has replied. Tap Play, or flick the picked cards up onto the table.
+- **A bluff is an event.** The call lands with a shake and a flash, the played cards rise out of the pile and turn over one
+  by one — the last after a drumroll — then the verdict slams down and the pile sweeps to whoever has to take it.
+- **Tension you can hear.** A turn timer running down speeds up a heartbeat and closes a red vignette in from the edges;
+  a player's last card gets its own warning.
+- **Sound without files.** Every sound is synthesised in the browser and panned to where it happens on the table. There
+  is nothing to download.
+- **Yours to turn down.** Settings has switches for sound, vibration and screen effects; *Reduced* removes shake, flashes
+  and particles, and *Auto* follows the device's reduce-motion setting. First-time tips show once, and can be shown again.
+
+How it's put together, the timeline of a reveal, how to add a sound or an effect, and the labs for auditioning them
+(`/dev/audio.html`, `/dev/fx.html`) are in [docs/game-feel.md](docs/game-feel.md).
 
 ## How to play
 
@@ -189,6 +216,8 @@ screenshot-tested:
 npm run dev:ui                    # → /dev/game.html?state=turn-mine
 # other states:  turn-theirs · turn-bot · challenge-call · challenge-accused · reveal-bluff · reveal-honest · eight-players …
 # lobby / join / game-over / error screens:  /dev/shell.html?state=lobby-host | finished-win | error-room_not_found | …   (?page=home)
+# a scripted game, to watch the choreography:  /dev/game.html?sim=1
+# labs for tuning the feel:  /dev/audio.html (every sound and vibration) · /dev/fx.html (every visual effect)
 ```
 
 ## Deploy
@@ -235,9 +264,10 @@ changes are easy to evaluate.
 | Command | What it covers |
 | --- | --- |
 | `npm run typecheck` · `npm run lint` | TypeScript (app, UI playground, tests) and ESLint |
-| `npm test` | Unit tests for the client sync layer (polling at server deadlines, backoff, clock skew, stale responses, double-submit protection, error recovery) and the pure helpers |
+| `npm test` | Unit tests for the client sync layer (polling at server deadlines, backoff, clock skew, stale responses, double-submit protection, error recovery), the pure helpers, and the game-feel layer (event plan, director, reveal timeline, synth, haptics, effects) |
 | `npm run test:db` | The engine against a throwaway Postgres in Docker: lobby rules, privacy (no card ever leaks, `anon` can't touch tables), every phase transition, timers and AFK, leaving, rematch, concurrency races, abuse limits, and full bot-played games with card-conservation checks |
-| `npm run e2e` | Playwright drives the real UI against the real engine on a phone viewport: solo game vs bots, invite link → two humans + a bot, reload restores your seat, finish + rematch, kicking, error screens. Needs a Postgres (see `playwright.config.ts`); `E2E_VISUAL=1` runs the screenshot tour instead |
+| `npm run e2e` | Playwright drives the real UI against the real engine on a phone viewport: solo game vs bots, invite link → two humans + a bot, reload restores your seat, finish + rematch, kicking, drag-to-play, settings, error screens. Needs a Postgres (see `playwright.config.ts`); `E2E_VISUAL=1` runs the screenshot tour instead |
+| `node scripts/audio-check.mjs` | Renders every sound offline through the game's own audio code and checks loudness, clipping, tails and length (needs Chromium; run it when you touch `src/lib/sound`) |
 
 `TEST_DATABASE_URL=<superuser url> npm run test:db` uses your own Postgres instead of Docker.
 [CI](.github/workflows/ci.yml) runs all of it on every push and pull request.
@@ -246,15 +276,16 @@ changes are easy to evaluate.
 
 ```
 supabase/migrations/   the engine: tables, rules, bots and API in a single migration
-src/lib/               types (the server contract), API client, sync engine (polling / realtime / clock), sound
+src/lib/               types (the server contract), API client, sync engine (polling / realtime / clock), preferences
+src/lib/feel/ sound/ fx/   game feel: the event → sound/vibration/effects plan, the WebAudio synth, the effects canvas
 src/hooks/             useRoom, useServerNow
-src/components/game/   cards, hand, seats, table, action bar, reveal overlay
+src/components/game/   cards, hand, seats, table, action bar, reveal overlay, and the director that paces the story
 src/components/shell/  logo, rules, toaster, error boundary, banners
 src/pages/             home, lobby, join, game over, room switchboard
 src/dev/ + dev/        fixtures for every game phase and a harness to preview screens without a backend
 tests/db/              engine tests          tests/unit/   client logic          tests/e2e/   Playwright specs
 scripts/               test-db.sh, dev-api.mjs, generate-brand-assets.mjs (logo, icons, screenshots, social images)
-docs/                  logo files, banner, social preview and the screenshots used here
+docs/                  game-feel.md, logo files, banner, social preview and the screenshots used here
 ```
 
 ## Troubleshooting
@@ -266,12 +297,12 @@ docs/                  logo files, banner, social preview and the screenshots us
 
 ## Built with
 
-React 18 · TypeScript (strict) · Vite · Tailwind CSS · Framer Motion · Radix UI · Supabase (Postgres, PostgREST,
-Realtime) · Vitest · Playwright · Vercel.
+React 18 · TypeScript (strict) · Vite · Tailwind CSS · Framer Motion · Radix UI · Web Audio · Supabase (Postgres,
+PostgREST, Realtime) · Vitest · Playwright · Vercel.
 
 ## Contributing
 
-Bug reports, ideas and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports, ideas and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

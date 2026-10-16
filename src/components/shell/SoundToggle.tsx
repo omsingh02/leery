@@ -14,10 +14,9 @@ export function SoundToggle({ className }: { className?: string }) {
       aria-pressed={!muted}
       onClick={() => {
         sfx.setMuted(!muted);
-        if (muted) {
-          sfx.unlock();
-          sfx.play("select");
-        }
+        // Turning sound on: the confirming blip has to wait until the audio is actually running (a context
+        // built by this very tap is still suspended for a moment).
+        if (muted) void sfx.unlock().then(() => sfx.play("select"));
       }}
       className={cn(
         "grid h-10 w-10 place-items-center rounded-full text-muted transition-colors hover:bg-white/10 hover:text-foreground",

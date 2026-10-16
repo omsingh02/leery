@@ -18,6 +18,7 @@ import "@/index.css";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { MotionConfig } from "framer-motion";
+import { FxProvider } from "@/components/fx/FxProvider";
 import { AppToaster } from "@/components/shell/AppToaster";
 import { ConfigError } from "@/components/shell/ConfigError";
 import { ErrorBoundary } from "@/components/shell/ErrorBoundary";
@@ -74,10 +75,12 @@ function Body() {
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
     <MotionConfig reducedMotion="user">
-      <AppToaster />
-      <MemoryRouter>
-        <Body />
-      </MemoryRouter>
+      <FxProvider>
+        <AppToaster />
+        <MemoryRouter>
+          <Body />
+        </MemoryRouter>
+      </FxProvider>
     </MotionConfig>
   </ErrorBoundary>,
 );

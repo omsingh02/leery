@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Loader2 } from "lucide-react";
+import { feel } from "@/lib/feel";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -40,16 +41,22 @@ const buttonVariants = cva(
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   /** Shows a spinner and disables the button. */
   loading?: boolean;
+  /** No press sound (for buttons that make their own). */
+  silent?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, loading, disabled, children, type = "button", ...props }, ref) => (
+  ({ className, variant, size, loading, disabled, silent, children, type = "button", onPointerDown, ...props }, ref) => (
     <button
       ref={ref}
       type={type}
       className={cn(buttonVariants({ variant, size }), className)}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
+      onPointerDown={(e) => {
+        if (!silent && !disabled && !loading) feel.emit({ type: "ui.tap" });
+        onPointerDown?.(e);
+      }}
       {...props}
     >
       {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}

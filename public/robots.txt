@@ -3,4 +3,4 @@ User-agent: *
 Allow: /
 Disallow: /r/
 
-Sitemap: https://leery.vercel.app/sitemap.xml
+Sitemap: https://leery.omsingh.me/sitemap.xml

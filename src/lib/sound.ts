@@ -1,125 +1,156 @@
-import { isMuted, setMutedPref } from "./session";
+import type { BedName, BedState, Cue, CueOptions } from "./feel/contract";
+import { prefs } from "./prefs";
+import { Engine } from "./sound/engine";
+
+export type { BedName, BedState, Cue, CueOptions };
+export { CUE_NAMES } from "./sound/cues";
 
 /**
- * Tiny WebAudio synth — no audio assets to load. Browsers only allow audio after a user gesture,
- * so call `sfx.unlock()` from any click/tap handler (the app does this once on first pointerdown).
+ * Leery's audio: a small WebAudio synth — no audio files to load. Browsers only allow audio after a
+ * user gesture, so call `sfx.unlock()` from a tap/click (the app does this on the first pointerup, after
+ * `sfx.prepare()` on the first pointerdown has built the engine).
+ * Cues are described in src/lib/sound/cues.ts; the vocabulary is src/lib/feel/contract.ts.
  */
-export type Cue = "select" | "play" | "turn" | "call" | "liar" | "honest" | "win" | "lose" | "tick" | "join";
 
-let ctx: AudioContext | null = null;
-let muted = isMuted();
-const listeners = new Set<() => void>();
+let engine: Engine | null = null;
+let wired = false;
+/** What the game last asked of each bed — replayed when the engine appears (first gesture, or after unmuting). */
+const bedWishes = new Map<BedName, BedState>();
 
-function audio(fromGesture = false): AudioContext | null {
-  if (muted) return null;
-  if (!ctx) {
-    // Creating a context before any user interaction only produces an autoplay warning; cues that fire
-    // from timers (e.g. before the first tap after a reload) are simply skipped until the user has interacted.
-    const ua = typeof navigator !== "undefined" ? navigator.userActivation : undefined;
-    if (!fromGesture && ua && !ua.hasBeenActive) return null;
-    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return null;
-    ctx = new Ctor();
+type AudioCtor = typeof AudioContext;
+
+function wirePrefs(): void {
+  if (wired) return;
+  wired = true;
+  // A phone call, a locked screen or another tab can leave the context suspended or "interrupted": wake it when we're back.
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && prefs.get().sound) void engine?.wake();
+    });
   }
-  if (ctx.state === "suspended") void ctx.resume();
-  return ctx;
+  let wasOn = prefs.get().sound;
+  prefs.subscribe(() => {
+    const on = prefs.get().sound;
+    if (on === wasOn) return;
+    wasOn = on;
+    if (on) engine?.restore();
+    else engine?.silence();
+  });
 }
 
-interface ToneOpts {
-  freq: number;
-  to?: number;
-  dur: number;
-  at?: number;
-  type?: OscillatorType;
-  gain?: number;
+/** Run `fn` once the frame being prepared has painted, so heavy setup never delays what the player just did. */
+function afterPaint(fn: () => void): void {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    fn();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(run, 0));
+  // A background tab never paints; don't wait for it.
+  setTimeout(run, 250);
 }
 
-function tone(c: AudioContext, { freq, to, dur, at = 0, type = "sine", gain = 0.06 }: ToneOpts) {
-  const t0 = c.currentTime + at;
-  const osc = c.createOscillator();
-  const g = c.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, t0);
-  if (to) osc.frequency.exponentialRampToValueAtTime(to, t0 + dur);
-  g.gain.setValueAtTime(0.0001, t0);
-  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.012);
-  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  osc.connect(g).connect(c.destination);
-  osc.start(t0);
-  osc.stop(t0 + dur + 0.02);
+/** A build that threw (no Web Audio features, too many open contexts…) isn't retried by cues; only an explicit unlock() tries again. */
+let buildFailed = false;
+
+/** Create the context and the engine around it. Costs tens of milliseconds (more on a phone), so never call it from an input handler. */
+function build(): Engine | null {
+  if (typeof window === "undefined") return null;
+  const Ctor: AudioCtor | undefined = window.AudioContext ?? (window as unknown as { webkitAudioContext?: AudioCtor }).webkitAudioContext;
+  if (!Ctor) return null;
+  let ctx: AudioContext | undefined;
+  try {
+    ctx = new Ctor({ latencyHint: "interactive" });
+    const built = new Engine(ctx);
+    for (const [name, state] of bedWishes) built.bed(name, state);
+    buildFailed = false;
+    return built;
+  } catch {
+    buildFailed = true;
+    void ctx?.close().catch(() => undefined); // browsers cap the number of live contexts: never strand one
+    return null;
+  }
 }
 
-function noise(c: AudioContext, dur: number, at = 0, gain = 0.05) {
-  const t0 = c.currentTime + at;
-  const buf = c.createBuffer(1, Math.max(1, Math.floor(c.sampleRate * dur)), c.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
-  const src = c.createBufferSource();
-  src.buffer = buf;
-  const filter = c.createBiquadFilter();
-  filter.type = "lowpass";
-  filter.frequency.value = 1800;
-  const g = c.createGain();
-  g.gain.value = gain;
-  src.connect(filter).connect(g).connect(c.destination);
-  src.start(t0);
+let building = false;
+/** Build the engine right after the current frame has painted (once), instead of inside whatever handler asked for a sound. */
+function buildSoon(): void {
+  if (engine || building) return;
+  building = true;
+  afterPaint(() => {
+    building = false;
+    try {
+      audio(true);
+    } catch {
+      /* audio is best-effort */
+    }
+  });
 }
 
-const CUES: Record<Cue, (c: AudioContext) => void> = {
-  select: (c) => tone(c, { freq: 660, to: 760, dur: 0.05, gain: 0.04 }),
-  tick: (c) => tone(c, { freq: 1000, dur: 0.025, type: "square", gain: 0.02 }),
-  join: (c) => tone(c, { freq: 440, to: 660, dur: 0.08, gain: 0.05 }),
-  play: (c) => {
-    noise(c, 0.09, 0, 0.07);
-    tone(c, { freq: 190, to: 80, dur: 0.14, type: "triangle", gain: 0.09 });
-  },
-  turn: (c) => {
-    tone(c, { freq: 523, dur: 0.12, gain: 0.06 });
-    tone(c, { freq: 784, dur: 0.18, at: 0.11, gain: 0.06 });
-  },
-  call: (c) => {
-    tone(c, { freq: 330, to: 110, dur: 0.28, type: "sawtooth", gain: 0.07 });
-    tone(c, { freq: 220, to: 70, dur: 0.28, type: "square", gain: 0.04 });
-  },
-  liar: (c) => {
-    tone(c, { freq: 440, to: 70, dur: 0.55, type: "sawtooth", gain: 0.07 });
-    noise(c, 0.2, 0, 0.05);
-  },
-  honest: (c) => {
-    [392, 494, 587].forEach((f, i) => tone(c, { freq: f, dur: 0.14, at: i * 0.09, gain: 0.06 }));
-  },
-  win: (c) => {
-    [523, 659, 784, 1047].forEach((f, i) => tone(c, { freq: f, dur: 0.32, at: i * 0.12, gain: 0.07 }));
-    tone(c, { freq: 1047, dur: 0.9, at: 0.5, gain: 0.05 });
-  },
-  lose: (c) => {
-    [392, 311, 262].forEach((f, i) => tone(c, { freq: f, dur: 0.3, at: i * 0.16, type: "triangle", gain: 0.07 }));
-  },
-};
+function audio(fromGesture = false, retry = false): Engine | null {
+  wirePrefs();
+  if (!prefs.get().sound) return null;
+  if (!engine) {
+    if (fromGesture) {
+      if (buildFailed && !retry) return null;
+      engine = build();
+      if (!engine) return null;
+    } else {
+      // Creating a context before any user interaction only produces an autoplay warning; cues that fire
+      // from timers (e.g. before the first tap after a reload) are simply skipped until the user has interacted.
+      const ua = typeof navigator !== "undefined" ? navigator.userActivation : undefined;
+      if (ua && !ua.hasBeenActive) return null;
+      // The player has interacted but there's no engine yet: this cue is dropped, the next ones play.
+      if (!buildFailed) buildSoon();
+      return null;
+    }
+  }
+  void engine.wake();
+  return engine;
+}
 
 export const sfx = {
-  play(cue: Cue) {
-    const c = audio();
-    if (!c) return;
+  /** Play a cue. Never throws; silently does nothing while muted or before the first user gesture. */
+  play(cue: Cue, opts?: CueOptions): void {
     try {
-      CUES[cue](c);
+      audio()?.play(cue, opts);
     } catch {
       /* audio is best-effort */
     }
   },
-  /** Call from a user gesture so later cues are allowed to play. */
-  unlock() {
-    const c = audio(true);
-    if (c && c.state === "suspended") void c.resume();
+  /** Start, update or stop a continuous bed. */
+  bed(name: BedName, state: BedState): void {
+    try {
+      bedWishes.set(name, { ...bedWishes.get(name), ...state });
+      // Even while muted the engine has to hear it: it keeps the latest wish and restores that one on unmute.
+      (audio() ?? engine)?.bed(name, state);
+    } catch {
+      /* audio is best-effort */
+    }
   },
-  isMuted: () => muted,
-  setMuted(next: boolean) {
-    muted = next;
-    setMutedPref(next);
-    listeners.forEach((l) => l());
+  /**
+   * Build the engine while a first tap is still down. Creating an AudioContext takes tens of milliseconds
+   * (more on a phone) — done at release it would delay the very first response; done here it hides inside
+   * the press. The context stays suspended until `unlock()`.
+   */
+  prepare(): void {
+    if (prefs.get().sound) buildSoon();
   },
-  subscribe(listener: () => void) {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
+  /**
+   * Call from a user gesture so later cues are allowed to play. Resolves once the audio is actually running,
+   * so a cue meant to confirm the tap (turning sound on) can wait for it instead of being dropped.
+   */
+  unlock(): Promise<void> {
+    try {
+      return audio(true, true)?.unlock() ?? Promise.resolve();
+    } catch {
+      return Promise.resolve(); /* audio is best-effort */
+    }
   },
+  isMuted: (): boolean => !prefs.get().sound,
+  setMuted(next: boolean): void {
+    prefs.set({ sound: !next });
+  },
+  subscribe: (listener: () => void): (() => void) => prefs.subscribe(listener),
 };

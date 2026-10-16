@@ -1,26 +1,60 @@
 /**
- * Choreography of a bluff reveal, in ms from when the overlay mounts. The server keeps the room in
- * "reveal" for ~4.2s, so even a 4-card reveal finishes with a beat to spare.
+ * Choreography of a bluff reveal, in ms from when the reveal begins. The server holds the room in
+ * "reveal" for 4.5 s, so even a four-card reveal finishes with a beat to spare.
+ *
+ *   0      the call lands (stamp, shake) · caller faces accused
+ *   claim  "<Accused> claimed 2 × Sevens"
+ *   emerge the played cards rise out of the pile onto the table, face-down
+ *   flips  cards turn over one by one — the last one waits (drumroll) for suspense
+ *   verdict BLUFF! / HONEST slams down
+ *   pickup the cards sweep to whoever has to take them (face-up first, then the rest of the pile)
+ *   settle the scrim lifts so the table is visible again as the counts tick up
  */
 export interface RevealTimeline {
-  /** "<Accused> claimed 2 × Sevens" and the face-down cards appear. */
   claim: number;
-  /** First card starts flipping; the rest follow every `stagger`. */
-  flip0: number;
-  stagger: number;
+  emerge: number;
+  /** Start of each card's flip. */
+  flips: number[];
+  /** When the drumroll starts (just before the last flip). */
+  drum: number;
   /** Duration of one flip. */
   flip: number;
-  /** BLUFF! / HONEST stamp lands. */
   verdict: number;
-  /** "<Picker> picks up N cards" appears. */
-  result: number;
+  /** The pile starts moving to the picker. */
+  pickup: number;
+  /** Cards touch down on the picker (sound, counts tick). */
+  land: number;
+  settle: number;
 }
 
+const FLIP = 460;
+const SUSPENSE = 380;
+
 export function revealTimeline(cards: number): RevealTimeline {
-  const claim = 450;
-  const flip0 = 900;
-  const stagger = 340;
-  const flip = 500;
-  const verdict = flip0 + Math.max(0, cards - 1) * stagger + flip + 200;
-  return { claim, flip0, stagger, flip, verdict, result: verdict + 480 };
+  const n = Math.max(1, cards);
+  const claim = 430;
+  const emerge = 700;
+  const first = 1250;
+  const gap = 330;
+  const flips: number[] = [];
+  for (let i = 0; i < n - 1; i++) flips.push(first + i * gap);
+  // The last card (or the only one) waits — that beat of silence is the whole game.
+  flips.push(n === 1 ? first + SUSPENSE : first + (n - 2) * gap + gap + SUSPENSE);
+  const last = flips[flips.length - 1];
+  const verdict = last + FLIP + 90;
+  const pickup = verdict + 420;
+  return { claim, emerge, flips, drum: Math.max(emerge + 200, last - 420), flip: FLIP, verdict, pickup, land: pickup + 640, settle: pickup + 200 };
+}
+
+/** The shortest the story is ever squeezed to (a quarter of its length): below that it would just be a blur. */
+const MIN_SCALE = 0.25;
+
+/**
+ * Joined mid-reveal (a reload, a reconnect)? Squeeze the whole story into the time that is left, so the verdict
+ * and the pickup still land before the server moves on. Every beat keeps its place in the order — they just come
+ * closer together. 1 means "tell it at full length".
+ */
+export function revealScale(tl: RevealTimeline, remainingMs: number): number {
+  if (!Number.isFinite(remainingMs)) return 1;
+  return Math.min(1, Math.max(MIN_SCALE, remainingMs / (tl.land + 300)));
 }

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
-import { createRoom, joinByLink, newDevice, setupPosition, sql } from "./helpers";
+import { createRoom, expectHand, joinByLink, newDevice, setupPosition, sql } from "./helpers";
 
 /**
  * On-demand visual tour (not part of the normal run):
@@ -50,6 +50,7 @@ test.describe("@visual", () => {
         3: ["AD", "2H", "3C", "4D", "5D", "6H", "8H", "9D", "10H", "JD", "QS", "7D"],
       },
     });
+    await expectHand(page, alexHand);
     await expect(page.getByTestId("play-button")).toBeVisible({ timeout: 15_000 });
     await shot(page, "04-game-my-turn");
     await shot(mira.page, "05-game-waiting");
@@ -83,6 +84,7 @@ test.describe("@visual", () => {
       rankIdx: 12,
       hands: { 0: alexHand, 1: ["2C", "4H", "5S", "6D", "8C", "9H"], 2: ["AC", "2D", "4S", "5H"], 3: ["AD", "2H", "3C", "4D"] },
     });
+    await expectHand(page, alexHand);
     await expect(page.getByTestId("play-button")).toBeVisible({ timeout: 15_000 });
     await page.getByTestId("hand").locator('[data-testid="card-3H"]').click({ position: { x: 6, y: 24 } });
     await page.getByTestId("hand").locator('[data-testid="card-3D"]').click({ position: { x: 6, y: 24 } });
@@ -99,12 +101,13 @@ test.describe("@visual", () => {
     const many: string[] = [];
     for (const r of ["A", "2", "3", "4", "5", "6", "7", "8"]) for (const s of ["S", "H", "D"]) many.push(`${r}${s}`);
     await setupPosition(code, { seat: 0, rankIdx: 2, hands: { 0: many, 1: ["KC", "QC"], 2: ["JC"], 3: ["10C", "9C"] } });
+    await expectHand(page, many);
     await expect(page.getByTestId("play-button")).toBeVisible({ timeout: 15_000 });
     await shot(page, "13-game-24-cards");
 
     // --- the finish ---
     await setupPosition(code, { seat: 0, rankIdx: 0, hands: { 0: ["AH"], 1: ["5C", "6C", "7C"], 2: ["JC"], 3: ["10C", "9C"] } });
-    await expect(page.getByTestId("hand").locator('[data-testid="card-AH"]')).toBeVisible({ timeout: 15_000 });
+    await expectHand(page, ["AH"]);
     await page.getByTestId("hand").locator('[data-testid="card-AH"]').click({ position: { x: 6, y: 24 } });
     await page.getByTestId("play-button").click();
     await expect(page.getByTestId("game-over")).toBeVisible({ timeout: 30_000 });

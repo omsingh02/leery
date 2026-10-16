@@ -1,10 +1,10 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useState, type ReactNode } from "react";
 import { Bot, Hourglass, Megaphone, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RoomController } from "@/hooks/useRoom";
 import { useCountdown } from "@/hooks/useServerNow";
 import { playerById, rankOf, RANK_PLURAL, RANK_SINGULAR } from "@/lib/game";
-import { sfx } from "@/lib/sound";
+import { feel } from "@/lib/feel";
 import type { CardCode, RoomView } from "@/lib/types";
 import { clamp, cn } from "@/lib/utils";
 import "./game.css";
@@ -19,22 +19,18 @@ interface ActionBarProps {
   limitHits: number;
   /** Short viewport: slimmer buttons, no hint line. */
   compact?: boolean;
+  /** Call bluff / accept: staged by the director so the feedback is instant. */
+  onCall: () => Promise<boolean>;
+  onAccept: () => Promise<boolean>;
 }
 
-/** Draining bar + seconds for the challenge window. Turns red in the last two seconds. */
-function WindowTimer({ since, deadline, serverNow, tick }: { since: number; deadline: number; serverNow: () => number; tick: boolean }) {
+/** Draining bar + seconds for the challenge window. Warms from mint to amber to red as it runs out. */
+function WindowTimer({ since, deadline, serverNow }: { since: number; deadline: number; serverNow: () => number }) {
   const { remainingMs, seconds } = useCountdown(deadline, { serverNow }, 80);
   const left = remainingMs ?? 0;
   const frac = clamp(left / Math.max(1000, deadline - since), 0, 1);
   const low = left < 2000;
-
-  const lastTick = useRef<number | null>(null);
-  useEffect(() => {
-    if (tick && seconds != null && seconds > 0 && seconds <= 3 && lastTick.current !== seconds) {
-      lastTick.current = seconds;
-      sfx.play("tick");
-    }
-  }, [seconds, tick]);
+  const mid = !low && frac < 0.4;
 
   return (
     <div className="flex items-center gap-3" aria-hidden>
@@ -42,12 +38,16 @@ function WindowTimer({ since, deadline, serverNow, tick }: { since: number; dead
         <div
           className={cn(
             "h-full rounded-full transition-[width] duration-100 ease-linear",
-            low ? "bg-bluff shadow-[0_0_10px_hsl(var(--bluff))]" : "bg-gradient-to-r from-trust to-primary",
+            low
+              ? "animate-pulse bg-bluff shadow-[0_0_12px_hsl(var(--bluff))]"
+              : mid
+                ? "bg-gradient-to-r from-gold to-amber-500 shadow-[0_0_8px_hsl(var(--gold)/0.6)]"
+                : "bg-gradient-to-r from-trust to-primary",
           )}
           style={{ width: `${frac * 100}%` }}
         />
       </div>
-      <span data-testid="window-seconds" className={cn("w-9 text-right font-display text-sm font-bold tabular-nums", low ? "text-bluff" : "text-foreground")}>
+      <span data-testid="window-seconds" className={cn("w-9 text-right font-display text-sm font-bold tabular-nums", low ? "text-bluff" : mid ? "text-gold" : "text-foreground")}>
         {seconds ?? 0}s
       </span>
     </div>
@@ -67,17 +67,24 @@ const Info = ({ icon, children, className }: { icon?: ReactNode; children: React
 );
 
 /** Bottom controls. Which ones show is entirely driven by the server's `me.canPlay / canCall / canPass`. */
-export const ActionBar = memo(function ActionBar({ room, view, selected, onPlay, onSelectMany, limitHits, compact = false }: ActionBarProps) {
+export const ActionBar = memo(function ActionBar({ room, view, selected, onPlay, onSelectMany, limitHits, compact = false, onCall, onAccept }: ActionBarProps) {
   const { status, turn, challenge, me, players } = view;
   const busy = room.busy;
 
-  const [flash, setFlash] = useState(false);
+  const [flash, setFlash] = useState<"max" | "pick" | null>(null);
+  const [nudges, setNudges] = useState(0);
   useEffect(() => {
     if (limitHits === 0) return;
-    setFlash(true);
-    const t = setTimeout(() => setFlash(false), 1800);
+    setFlash("max");
+    const t = setTimeout(() => setFlash(null), 1800);
     return () => clearTimeout(t);
   }, [limitHits]);
+  useEffect(() => {
+    if (nudges === 0) return;
+    setFlash("pick");
+    const t = setTimeout(() => setFlash(null), 1800);
+    return () => clearTimeout(t);
+  }, [nudges]);
 
   const autoBanner = me.auto ? (
     <div className="mb-2 flex items-center gap-3 rounded-2xl border border-gold/30 bg-gold/10 px-3.5 py-2.5">
@@ -106,7 +113,10 @@ export const ActionBar = memo(function ActionBar({ room, view, selected, onPlay,
               <button
                 type="button"
                 data-testid="select-honest"
-                onClick={() => onSelectMany(honest)}
+                onClick={() => {
+                  feel.emit({ type: "card.wave", n: honest.length });
+                  onSelectMany(honest);
+                }}
                 className="rounded-full border border-gold/40 bg-gold/10 px-4 py-2 text-xs font-semibold text-gold transition-colors hover:bg-gold/20 active:scale-95"
               >
                 Select my {honest.length} {honest.length === 1 ? RANK_SINGULAR[turn.rank] : RANK_PLURAL[turn.rank]}
@@ -116,7 +126,10 @@ export const ActionBar = memo(function ActionBar({ room, view, selected, onPlay,
               <button
                 type="button"
                 data-testid="clear-selection"
-                onClick={() => onSelectMany([])}
+                onClick={() => {
+                  feel.emit({ type: "card.deselect", n: 0 });
+                  onSelectMany([]);
+                }}
                 className="rounded-full border border-white/15 bg-white/[0.05] px-3.5 py-2 text-xs font-semibold text-muted transition-colors hover:bg-white/10 hover:text-foreground active:scale-95"
               >
                 Clear
@@ -126,15 +139,23 @@ export const ActionBar = memo(function ActionBar({ room, view, selected, onPlay,
           <Button
             size={compact ? "lg" : "xl"}
             data-testid="play-button"
-            className="w-full"
-            disabled={n === 0}
+            className={cn("w-full", n === 0 && "opacity-50 saturate-50")}
+            aria-disabled={n === 0 || undefined}
             loading={busy}
-            onClick={onPlay}
+            onClick={() => {
+              if (n === 0) {
+                // A disabled button that explains itself: nudge the hint and say "not yet".
+                feel.emit({ type: "card.limit" });
+                setNudges((k) => k + 1);
+                return;
+              }
+              onPlay();
+            }}
           >
             {n === 0 ? "Pick 1–4 cards to play" : `Play ${n} card${n === 1 ? "" : "s"} as ${RANK_PLURAL[turn.rank]}`}
           </Button>
-          <p key={flash ? limitHits : "idle"} className={cn("text-center text-xs", flash ? "animate-shake font-semibold text-gold" : "text-muted", compact && !flash && "hidden")}>
-            {flash ? "Max 4 cards per turn" : `${n}/4 selected · face-down — lie if you like`}
+          <p key={flash ? `${flash}${limitHits}${nudges}` : "idle"} className={cn("text-center text-xs", flash ? "animate-shake font-semibold text-gold" : "text-muted", compact && !flash && "hidden")}>
+            {flash === "max" ? "Max 4 cards per turn" : flash === "pick" ? "Tap 1–4 cards in your hand first" : `${n}/4 selected · face-down — lie if you like`}
           </p>
         </div>
       );
@@ -151,28 +172,37 @@ export const ActionBar = memo(function ActionBar({ room, view, selected, onPlay,
     const canAct = (me.canCall || me.canPass) && !me.passed;
     body = (
       <div className="flex flex-col gap-3">
-        <WindowTimer since={challenge.since} deadline={challenge.deadline} serverNow={room.serverNow} tick={canAct} />
+        <WindowTimer since={challenge.since} deadline={challenge.deadline} serverNow={room.serverNow} />
         {canAct ? (
-          <div className="flex gap-3">
-            <Button
-              variant="bluff"
-              size={compact ? "lg" : "xl"}
-              data-testid="call-bluff"
-              className="flex-[1.5] animate-pulse-glow"
-              disabled={!me.canCall}
-              loading={busy}
-              onClick={() => void room.call()}
-            >
-              <Megaphone className="h-5 w-5" aria-hidden />
-              Call bluff!
-            </Button>
+          // A 3:2 grid, not flex: flex-grow would split only the space left *after* each button's padding, which
+          // flattens the ratio (and let Accept spill off the screen on a 360px phone). Tighter padding on narrow screens.
+          <div className="grid grid-cols-[3fr_2fr] gap-3">
+            <div className="relative">
+              {/* the pulsing glow lives on its own layer (opacity/scale only), so it costs no repaint */}
+              <span aria-hidden className="pointer-events-none absolute -inset-1 rounded-full bg-bluff/55 blur-lg animate-glow-breathe" />
+              <Button
+                variant="bluff"
+                size={compact ? "lg" : "xl"}
+                data-testid="call-bluff"
+                className="relative w-full overflow-hidden px-4 min-[380px]:px-7"
+                disabled={!me.canCall}
+                loading={busy}
+                onClick={() => void onCall()}
+              >
+                <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+                  <span className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shine" />
+                </span>
+                <Megaphone className="relative h-5 w-5" aria-hidden />
+                <span className="relative">Call bluff!</span>
+              </Button>
+            </div>
             <Button
               variant="trust"
               size={compact ? "lg" : "xl"}
               data-testid="accept-play"
-              className="flex-1"
+              className="w-full px-4 min-[380px]:px-7"
               disabled={!me.canPass || busy}
-              onClick={() => void room.pass()}
+              onClick={() => void onAccept()}
             >
               <Check className="h-5 w-5" aria-hidden />
               Accept

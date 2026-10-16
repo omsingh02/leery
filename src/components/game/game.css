@@ -73,3 +73,41 @@
 .leery-scroll-x::-webkit-scrollbar {
   display: none;
 }
+
+/* Dragging picked cards up onto the table: they follow the finger/pointer, then spring home if let go too soon. */
+.hand-drag-layer {
+  position: relative;
+  transform: translate3d(var(--drag-x, 0px), var(--drag-y, 0px), 0) rotate(var(--drag-r, 0deg));
+  will-change: transform;
+  filter: drop-shadow(0 14px 16px rgb(0 0 0 / 0.5));
+}
+.hand-drag-return {
+  transition: transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+/* The felt gives things up when its content doesn't fit (feltFit.ts decides the order and sets data-fit-drop to the
+   names of what is gone, e.g. "sub dial labels"; data-fit is the plain level, 0 = everything). Name-based so a new
+   level can't leave a rule behind. `row` is phones only: the pile goes beside the banner, the border thins, the title
+   and its rank chip get smaller. */
+.felt[data-fit-drop~="sub"] .fit-sub,
+.felt[data-fit-drop~="dial"] .fit-dial,
+.felt[data-fit-drop~="labels"] :is(.fit-over, .fit-prompt) {
+  display: none;
+}
+.felt[data-fit-drop~="row"] {
+  padding-block: 0.25rem;
+}
+.felt[data-fit-drop~="row"] .fit-row {
+  flex-direction: row-reverse;
+  gap: 0.5rem;
+}
+.felt[data-fit-drop~="row"] .fit-title {
+  font-size: 0.9375rem;
+  column-gap: 0.375rem;
+  row-gap: 0.125rem;
+}
+.felt[data-fit-drop~="row"] .fit-chip {
+  height: 2rem;
+  min-width: 1.75rem;
+  font-size: 1.0625rem;
+}
