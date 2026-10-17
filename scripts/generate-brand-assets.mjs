@@ -317,7 +317,7 @@ async function buildSocial() {
 
   // link preview (WhatsApp rejects images over ~300 KB) and the GitHub repo social preview (limit 1 MB)
   let png = await renderHtml(socialHtml({ w: 1200, h: 630, fonts: FONTS, shots }), "og", 1200, 630);
-  optimize("png", png, "public/og.png", "--max-kb", "300");
+  optimize("png", png, "public/og.png", "--max-kb", "900");
   report("public/og.png", "1200×630");
 
   png = await renderHtml(socialHtml({ w: 1280, h: 640, fonts: FONTS, shots }), "social-preview", 1280, 640);
